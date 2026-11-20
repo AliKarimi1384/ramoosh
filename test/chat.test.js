@@ -145,6 +145,51 @@ function sentEvents(res) {
   return res.chunks.filter(chunk => chunk.startsWith('data: ')).map(chunk => JSON.parse(chunk.slice(6)));
 }
 
+test('opens the local hashing form for both providers, with and without streaming', async () => {
+  const originalFetch = globalThis.fetch;
+  const openai = process.env.OPENAI_API_KEY;
+  const groq = process.env.GROQ_API_KEY;
+  try {
+    for (const provider of ['openai', 'groq']) {
+      if (provider === 'openai') {
+        process.env.OPENAI_API_KEY = 'test-key';
+        delete process.env.GROQ_API_KEY;
+      } else {
+        delete process.env.OPENAI_API_KEY;
+        process.env.GROQ_API_KEY = 'gsk_test';
+      }
+      for (const stream of [false, true]) {
+        let payload;
+        globalThis.fetch = async (_url, options) => {
+          payload = JSON.parse(options.body);
+          if (stream) return { ok: true, body: providerStream(provider === 'openai' ? [
+            { type: 'response.completed', response: { output: [{ type: 'function_call', name: 'open_hash_tool' }] } },
+            '[DONE]',
+          ] : [
+            { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'open_hash_' } }] }, finish_reason: null }] },
+            { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'tool' } }] }, finish_reason: 'tool_calls' }] },
+            '[DONE]',
+          ]) };
+          return { ok: true, json: async () => provider === 'openai'
+            ? { output: [{ type: 'function_call', name: 'open_hash_tool' }] }
+            : { choices: [{ message: { tool_calls: [{ function: { name: 'open_hash_tool' } }] } }] } };
+        };
+        const res = stream ? streamResponse() : response();
+        await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: 'hash a message' }], stream } }, res);
+        const result = stream ? sentEvents(res).at(-1) : res.body;
+        assert.equal(result.action, 'hash');
+        assert.match(result.reply, /hashing tool/i);
+        const tool = payload.tools.map(item => item.function || item).find(item => item.name === 'open_hash_tool');
+        assert.deepEqual(tool.parameters.properties, {});
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (openai === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = openai;
+    if (groq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = groq;
+  }
+});
+
 test('streams OpenAI text across byte boundaries and reports the final reply', async () => {
   const fetch = globalThis.fetch;
   const openai = process.env.OPENAI_API_KEY;
@@ -194,7 +239,7 @@ test('streams Groq tool calls and reports interrupted streams as errors', async 
     await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: 'encrypt' }], stream: true } }, res);
     assert.deepEqual(sentEvents(res), [
       { type: 'delta', text: 'Working' },
-      { type: 'done', reply: 'The encryption tool is ready. Enter your message and passphrase in the secure form.', action: 'encrypt' },
+      { type: 'done', reply: 'The encryption tool is ready. Choose a cryptography method and enter the details in the form.', action: 'encrypt' },
     ]);
     globalThis.fetch = async () => ({ ok: true, body: providerStream([
       { choices: [{ delta: { content: 'partial' }, finish_reason: null }] },

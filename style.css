@@ -129,3 +129,26 @@ html[dir="ltr"] .user .bubble{border-radius:16px 4px 16px 16px}
 .chat-layout-empty .welcome h1{font-size:clamp(21px,3vw,30px);letter-spacing:0;margin:0 0 22px}
 .chat-layout-empty .composer-wrap{width:100%;padding-top:0;background:none}
 @media(max-height:520px){.chat-layout-empty{padding-bottom:12px}.chat-layout-empty .welcome-emblem{height:55px;width:55px;margin-bottom:4px}.chat-layout-empty .welcome h1{font-size:19px;margin-bottom:12px}}
+
+.site-credit{flex-shrink:0;padding:0 12px max(8px,env(safe-area-inset-bottom));text-align:center;font-size:11px;line-height:1.6}
+.site-credit a{color:#8da69a;text-decoration:none}
+.site-credit a:hover{text-decoration:underline}
+.site-credit a:focus-visible{outline:2px solid #80dfb7;outline-offset:3px}
+html[data-theme="light"] .site-credit a{color:#536d5c}
+
+/* Cryptography method and key controls */
+.protocol-select{width:100%;border:1px solid #34483e;border-radius:10px;background:#101c18;color:#e2eee6;padding:12px;font:inherit;font-size:14px}
+.protocol-select:focus-visible,.generated-keys summary:focus-visible{outline:2px solid #80dfb7;outline-offset:3px}
+.crypto-card .key-field,.generated-keys textarea{font-family:monospace;font-size:12px;line-height:1.5;text-align:left;min-height:110px}
+.secondary-button{width:100%;border:1px solid #537b64;border-radius:10px;background:#20382c;color:#d8f1e1;padding:10px;font-size:13px;font-weight:700;margin-bottom:16px}
+.secondary-button:hover{background:#2b4c3a}
+.generated-keys{border:1px solid #34483e;border-radius:10px;padding:10px 12px;margin:0 0 16px}
+.generated-keys summary{cursor:pointer;color:#b4e4c4;font-size:13px}
+.generated-keys label{margin:12px 0 8px}
+.generated-keys .field-hint{margin-bottom:0}
+html[data-theme="light"] .protocol-select{background:#f8fbf8;border-color:#c7dace;color:#1c3a29}
+html[data-theme="light"] .secondary-button{background:#e5f3e8;border-color:#aacdb4;color:#244c31}
+html[data-theme="light"] .secondary-button:hover{background:#d6ecdc}
+html[data-theme="light"] .generated-keys{border-color:#c7dace}
+html[data-theme="light"] .generated-keys summary{color:#315e40}
+@media(max-width:600px){.protocol-select{font-size:16px}}

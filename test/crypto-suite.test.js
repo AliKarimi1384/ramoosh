@@ -44,6 +44,17 @@ test('Hashing: standard test vectors and multi-format support', async () => {
   assert.equal(await verifyHash('hello world', 'invalid', { algorithm: 'SHA-256', format: 'hex' }), false);
 });
 
+test('Hashing: SHA-2 algorithms match standard vectors for abc', async () => {
+  const vectors = {
+    'SHA-256': 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    'SHA-384': 'cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7',
+    'SHA-512': 'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f'
+  };
+  for (const [algorithm, expected] of Object.entries(vectors)) {
+    assert.equal(await hashText('abc', { algorithm, format: 'hex' }), expected);
+  }
+});
+
 test('HMAC: generation and verification against tampering', async () => {
   const secret = 'super-secret-key-123';
   const message = 'تأیید اصالت پیام فارسی';
@@ -99,6 +110,15 @@ test('Asymmetric Encryption: RSA-OAEP encrypt and decrypt round-trip', async () 
 
   const decrypted = await decryptWithPrivateKey(encrypted, keyPair.privateKey);
   assert.equal(decrypted, secretText);
+
+  // A 2048-bit OAEP key with SHA-256 supports at most 190 UTF-8 bytes.
+  const maxMessage = 'a'.repeat(190);
+  assert.equal(await decryptWithPrivateKey(await encryptWithPublicKey(maxMessage, keyPair.publicKey), keyPair.privateKey), maxMessage);
+  await assert.rejects(encryptWithPublicKey('a'.repeat(191), keyPair.publicKey), /190/);
+  await assert.rejects(encryptWithPublicKey('😊'.repeat(48), keyPair.publicKey), /190/);
+  await assert.rejects(encryptWithPublicKey('message', {}));
+  await assert.rejects(decryptWithPrivateKey(encrypted, keyPair.publicKey));
+  await assert.rejects(decryptWithPrivateKey('rsa1.invalid!', keyPair.privateKey));
 
   // Other key cannot decrypt
   const otherKeyPair = await generateEncryptionKeyPair({ modulusLength: 2048 });

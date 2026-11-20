@@ -1,15 +1,17 @@
 import { resilientFetch } from '../lib/http-client.js';
-import { streamChat } from '../lib/llm-stream.js';
+import { actionFor, streamChat } from '../lib/llm-stream.js';
 
-const INSTRUCTIONS_FA = `تو دستیار فارسی «رموش» هستی. در مورد رمزگذاری و رمزگشایی پیام به اختصار راهنمایی کن.
-وقتی کاربر می‌خواهد پیامی را رمزگذاری یا رمزگشایی کند ابزار مربوط را فراخوانی کن.
-ابزار هیچ ورودی محرمانه‌ای ندارد؛ متن و گذرواژه بعداً فقط در مرورگر دریافت می‌شوند.
-هرگز از کاربر نخواه متن یا گذرواژه را در چت وارد کند. اگر درخواست مبهم بود، سؤال کوتاهی بپرس.`;
+const INSTRUCTIONS_FA = `تو دستیار فارسی «رموش» هستی. در مورد رمزگذاری، رمزگشایی و هش پیام به اختصار راهنمایی کن.
+وقتی کاربر می‌خواهد پیامی را رمزگذاری، رمزگشایی یا هش کند ابزار مربوط را فراخوانی کن.
+ابزار هیچ ورودی محرمانه‌ای ندارد؛ متن، رمز پیام و کلیدها بعداً فقط در مرورگر دریافت می‌شوند.
+در فرم می‌توان بین AES با رمز پیام و RSA-OAEP با کلید عمومی و خصوصی انتخاب کرد.
+هرگز از کاربر نخواه متن، رمز پیام یا کلید خصوصی را در چت وارد کند. اگر درخواست مبهم بود، سؤال کوتاهی بپرس.`;
 
-const INSTRUCTIONS_EN = `You are Ramoosh, an English-speaking assistant. Give brief guidance about encrypting and decrypting messages.
-When the user wants to encrypt or decrypt a message, call the corresponding tool.
-The tool takes no confidential input; the message and passphrase are collected later only in the browser.
-Never ask the user to enter a message or passphrase in the chat. If the request is ambiguous, ask a short question. Respond in English.`;
+const INSTRUCTIONS_EN = `You are Ramoosh, an English-speaking assistant. Give brief guidance about encrypting, decrypting, and hashing messages.
+When the user wants to encrypt, decrypt, or hash a message, call the corresponding tool.
+The tool takes no confidential input; the message, passphrase, and keys are collected later only in the browser.
+The form offers AES with a passphrase and RSA-OAEP with public and private keys.
+Never ask the user to enter a message, passphrase, or private key in the chat. If the request is ambiguous, ask a short question. Respond in English.`;
 
 const translations = {
   fa: {
@@ -19,8 +21,9 @@ const translations = {
     missingKey: 'کلید سرویس هوش مصنوعی تنظیم نشده است.',
     connection: 'ارتباط با سرویس هوش مصنوعی برقرار نشد. دوباره تلاش کنید.',
     invalidReply: 'پاسخ معتبری از سرویس دریافت نشد. دوباره تلاش کنید.',
-    encrypt: 'ابزار رمزگذاری آماده است. متن و گذرواژه را در بخش امن وارد کنید.',
-    decrypt: 'ابزار رمزگشایی آماده است. پیام رمزگذاری‌شده و گذرواژه را در بخش امن وارد کنید.',
+    encrypt: 'ابزار رمزگذاری آماده است. روش رمزنگاری را انتخاب و اطلاعات را در فرم وارد کنید.',
+    decrypt: 'ابزار رمزگشایی آماده است. روش رمزنگاری را انتخاب و اطلاعات را در فرم وارد کنید.',
+    hash: 'ابزار هش آماده است. الگوریتم را انتخاب و متن را در فرم وارد کنید.',
   },
   en: {
     instructions: INSTRUCTIONS_EN,
@@ -29,14 +32,16 @@ const translations = {
     missingKey: 'The AI service key is not configured.',
     connection: 'Could not connect to the AI service. Please try again.',
     invalidReply: 'The service returned an invalid response. Please try again.',
-    encrypt: 'The encryption tool is ready. Enter your message and passphrase in the secure form.',
-    decrypt: 'The decryption tool is ready. Enter the encrypted message and passphrase in the secure form.',
+    encrypt: 'The encryption tool is ready. Choose a cryptography method and enter the details in the form.',
+    decrypt: 'The decryption tool is ready. Choose a cryptography method and enter the details in the form.',
+    hash: 'The hashing tool is ready. Choose an algorithm and enter the text in the form.',
   },
 };
 
 const tools = [
   { type: 'function', name: 'encrypt_message', description: 'Open the local message encryption tool.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
   { type: 'function', name: 'decrypt_message', description: 'Open the local message decryption tool.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
+  { type: 'function', name: 'open_hash_tool', description: 'Open the local text hashing tool without sending the text to the server.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
 ];
 
 export default async function handler(req, res) {
@@ -87,6 +92,14 @@ export default async function handler(req, res) {
           parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
         },
       },
+      {
+        type: 'function',
+        function: {
+          name: 'open_hash_tool',
+          description: 'Open the local text hashing tool without sending the text to the server.',
+          parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        },
+      },
     ];
 
     try {
@@ -116,9 +129,9 @@ export default async function handler(req, res) {
       const data = await response.json();
       const choice = data.choices?.[0];
       const toolCall = choice?.message?.tool_calls?.find(c =>
-        ['encrypt_message', 'decrypt_message'].includes(c.function?.name)
+        actionFor(c.function?.name)
       );
-      const action = toolCall ? (toolCall.function.name === 'encrypt_message' ? 'encrypt' : 'decrypt') : null;
+      const action = actionFor(toolCall?.function?.name);
       const text = choice?.message?.content?.trim();
       const reply = action ? t[action] : text;
       if (!reply) return res.status(502).json({ error: t.invalidReply });
@@ -138,8 +151,8 @@ export default async function handler(req, res) {
     if (!response.ok) return res.status(502).json({ error: t.connection });
     if (streaming) return await streamChat(response, res, 'openai', t);
     const data = await response.json();
-    const call = data.output?.find(item => item.type === 'function_call' && ['encrypt_message', 'decrypt_message'].includes(item.name));
-    const action = call ? (call.name === 'encrypt_message' ? 'encrypt' : 'decrypt') : null;
+    const call = data.output?.find(item => item.type === 'function_call' && actionFor(item.name));
+    const action = actionFor(call?.name);
     const text = data.output?.flatMap(item => item.type === 'message' ? item.content || [] : []).filter(item => item.type === 'output_text').map(item => item.text).join('\n').trim();
     const reply = action ? t[action] : text;
     if (!reply) return res.status(502).json({ error: t.invalidReply });
