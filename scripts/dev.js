@@ -2,13 +2,12 @@ import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
 import { createServer as createViteServer } from 'vite';
 import chat from '../api/chat.js';
-import vault from '../api/vault.js';
 
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
 else if (existsSync('.env')) process.loadEnvFile('.env');
 
 const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
-const handlers = new Map([['/api/chat', chat], ['/api/vault', vault]]);
+const handlers = new Map([['/api/chat', chat]]);
 const server = createServer(async (req, res) => {
   const pathname = new URL(req.url, 'http://localhost').pathname;
   const handler = handlers.get(pathname);
