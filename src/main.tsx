@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { decryptMessage, encryptMessage } from '../lib/crypto.js';
 import logoMark from './ramoosh-mark.svg';
 import { translations, type Language } from './i18n';
+import { VaultWorkspace } from './VaultWorkspace';
+import { vaultTranslations } from './vault-i18n';
 import '../style.css';
 
 type Mode = 'encrypt' | 'decrypt';
@@ -24,6 +26,7 @@ function App() {
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
   const themeChosen = useRef(false);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [showVault, setShowVault] = useState(false);
   const [mode, setModeState] = useState<Mode>('encrypt');
   const [source, setSource] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -46,6 +49,8 @@ function App() {
   const resultRef = useRef<HTMLTextAreaElement>(null);
   const busyRef = useRef(false);
   const encrypting = mode === 'encrypt';
+  const vaultCopy = vaultTranslations[language];
+  const workspaceLabel = showVault ? vaultCopy.chat : vaultCopy.title;
 
   useLayoutEffect(() => {
     document.documentElement.lang = language;
@@ -171,14 +176,26 @@ function App() {
   return <div className="app-shell">
     <header className="topbar">
       <a className="brand" href="/" aria-label={t.home}><span className="brand-mark" aria-hidden="true"><Mark /></span><span className="brand-name">{t.brand}<small>{t.brandSecondary}</small></span></a>
-      <div className="header-actions"><span className="header-caption">{t.caption}</span><span className="header-divider"/><button className="language-toggle" type="button" aria-label={t.switchLanguage} title={t.switchLanguage} onClick={() => setLanguage(language === 'fa' ? 'en' : 'fa')}>{t.languageButton}</button><button className="theme-toggle" type="button" aria-label={theme === 'dark' ? t.lightTheme : t.darkTheme} title={theme === 'dark' ? t.light : t.dark} onClick={toggleTheme}>{theme === 'dark' ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg> : <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.3 15.5A8.5 8.5 0 0 1 8.5 3.7 8.5 8.5 0 1 0 20.3 15.5Z"/></svg>}</button><button className="new-chat" type="button" aria-label={t.newChatLabel} onClick={newChat}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>{t.newChat}</span></button></div>
+      <div className="header-actions">
+        <span className="header-caption">{t.caption}</span><span className="header-divider"/>
+        <button className="language-toggle" type="button" aria-label={t.switchLanguage} title={t.switchLanguage} onClick={() => setLanguage(language === 'fa' ? 'en' : 'fa')}>{t.languageButton}</button>
+        <button className="theme-toggle" type="button" aria-label={theme === 'dark' ? t.lightTheme : t.darkTheme} title={theme === 'dark' ? t.light : t.dark} onClick={toggleTheme}>{theme === 'dark' ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg> : <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.3 15.5A8.5 8.5 0 0 1 8.5 3.7 8.5 8.5 0 1 0 20.3 15.5Z"/></svg>}</button>
+        <button className="new-chat workspace-switch" type="button" aria-label={workspaceLabel} title={workspaceLabel} onClick={() => setShowVault(!showVault)}>
+          {showVault ? <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5h14v10H10l-5 4z"/><path d="M8 9h8m-8 3h5"/></svg> : <LockIcon/>}
+          <span>{workspaceLabel}</span>
+        </button>
+        {!showVault && <button className="new-chat" type="button" aria-label={t.newChatLabel} onClick={newChat}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>{t.newChat}</span></button>}
+      </div>
     </header>
-    <main className="chat-layout" aria-label={t.chatLabel} ref={layoutRef}>
+    {showVault ? <VaultWorkspace language={language} /> : <main className="chat-layout" aria-label={t.chatLabel} ref={layoutRef}>
       <div className="messages" role="log" aria-live="polite" ref={scrollRef}>
         {entries.length === 0 && <section className="welcome" aria-labelledby="welcome-title">
           <div className="welcome-emblem" aria-hidden="true"><span className="emblem-orbit orbit-one"/><span className="emblem-orbit orbit-two"/><Mark /></div>
           <div className="welcome-kicker"><span/> {t.kicker}</div><h1 id="welcome-title">{t.welcome}<span>.</span></h1><p>{t.welcomeLine1}<br/>{t.welcomeLine2}</p>
-          <div className="suggestions" aria-label={t.quickStart}>{(['encrypt', 'decrypt'] as const).map(item => <button type="button" key={item} onClick={() => setMode(item)}><span className="suggestion-icon"><LockIcon open={item === 'decrypt'}/></span><span><strong>{item === 'encrypt' ? t.encryptMessage : t.decryptMessage}</strong><small>{item === 'encrypt' ? t.encryptSuggestion : t.decryptSuggestion}</small></span><span className="suggestion-plus">+</span></button>)}</div>
+          <div className="suggestions" aria-label={t.quickStart}>
+            {(['encrypt', 'decrypt'] as const).map(item => <button type="button" key={item} onClick={() => setMode(item)}><span className="suggestion-icon"><LockIcon open={item === 'decrypt'}/></span><span><strong>{item === 'encrypt' ? t.encryptMessage : t.decryptMessage}</strong><small>{item === 'encrypt' ? t.encryptSuggestion : t.decryptSuggestion}</small></span><span className="suggestion-plus">+</span></button>)}
+            <button type="button" className="vault-suggestion" onClick={() => setShowVault(true)}><span className="suggestion-icon"><LockIcon/></span><span><strong>{vaultCopy.title}</strong><small>{vaultCopy.intro}</small></span><span className="suggestion-plus">+</span></button>
+          </div>
         </section>}
         {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><span className="avatar" aria-hidden="true">{entry.message.role === 'assistant' ? '✳' : t.userAvatar}</span><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className="bubble" dir="auto">{entry.message.content}</div></div></div> : <section className="crypto-card" aria-labelledby="tool-heading" key={entry.id}>
           <div className="crypto-card-head"><div><span className="local-label"><span/> {t.local}</span><h2 id="tool-heading">{encrypting ? t.encryptMessage : t.decryptMessage}</h2><p>{encrypting ? t.encryptDescription : t.decryptDescription}</p></div><span className="card-lock" aria-hidden="true">⌁</span></div>
@@ -188,7 +205,7 @@ function App() {
         </section>)}
       </div>
       <div className="composer-wrap"><div className="composer-inner"><form className="chat-form" onSubmit={sendMessage}><label className="sr-only" htmlFor="chat-input">{t.chatInput}</label><input id="chat-input" dir="auto" ref={inputRef} value={input} onChange={event => setInput(event.target.value)} placeholder={t.chatPlaceholder} maxLength={2000} autoComplete="off"/><span className="composer-hint">{t.yourMessage}</span><button type="submit" disabled={busy} aria-label={t.send}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></form><p className="chat-warning"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.2 3.1 7.5 7.5 9.5 4.4-2 7.5-5.3 7.5-9.5V6L12 3Z"/><path d="M12 8v4M12 16h.01"/></svg> {t.warning}</p></div></div>
-    </main>
+    </main>}
   </div>;
 }
 
