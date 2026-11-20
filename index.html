@@ -3,48 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f6f5ef">
-  <meta name="description" content="دستیار رمزنگاری خصوصی پیام با کمک هوش مصنوعی">
-  <title>رموش | دستیار رمزنگاری پیام</title>
+  <meta name="theme-color" content="#0b1113">
+  <meta name="description" content="رموش، فضای ساده‌ای برای گفت‌وگو درباره رمزنگاری و پردازش محلی پیام‌ها">
+  <title>رموش | دستیار رمزنگاری</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <a class="brand" href="/" aria-label="رموش، صفحه اصلی"><span class="brand-mark"><img src="/logo.png" alt=""></span><span><strong>رموش</strong><small>دستیار امن پیام</small></span></a>
-      <div class="sidebar-main">
-        <p class="side-label">فضای کاری شما</p>
-        <div class="side-active"><span>◈</span> دستیار رمزنگاری <i>↗</i></div>
-        <div class="side-note"><span class="side-note-icon">✳</span><strong>حرف‌ها برای خودتان.</strong><p>پیام و عبارت عبور شما در همین مرورگر پردازش می‌شوند.</p></div>
-      </div>
-      <div class="side-footer"><span class="status-dot"></span> ساخته شده برای گفت‌وگوهای خصوصی <span>✦</span></div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar"><div><span class="mobile-brand-mark" aria-hidden="true"><img src="/logo.png" alt=""></span><span class="breadcrumb">فضای کاری</span><span class="slash">/</span><strong>دستیار رمزنگاری</strong></div><span class="top-badge"><span class="status-dot"></span> پردازش محلی پیام</span></header>
-      <div class="content">
-        <section class="intro"><div><span class="eyebrow"><span>✦</span> کمی هوشمندی، کمی محرمانگی</span><h1>حرف‌هات، فقط برای خودت<span>.</span></h1><p>یک دستیار ساده برای رمزگذاری پیام‌ها و باز کردن دوباره‌شان؛ با کنترل کامل خودت.</p></div><div class="intro-art" aria-hidden="true"><span>✳</span><i>✦</i></div></section>
-        <div class="workspace">
-          <section class="chat panel" aria-labelledby="chat-title">
-            <div class="panel-head"><div class="head-icon purple">✳</div><div><h2 id="chat-title">گفت‌وگو با رموش</h2><p>بگو چه کاری می‌خواهی انجام دهی</p></div><span class="head-tag">دستیار هوشمند</span></div>
-            <div id="chat-messages" class="messages" role="log" aria-live="polite"><div class="message assistant"><span class="avatar">✳</span><div><div class="message-meta">رموش <span>همین حالا</span></div><div class="bubble">سلام! من اینجام تا در رمزگذاری یا رمزگشایی پیام کمکت کنم. از کجا شروع کنیم؟</div></div></div></div>
-            <div class="chat-bottom"><div class="suggestions"><button type="button" data-prompt="می‌خواهم یک پیام را رمزگذاری کنم">✧ &nbsp; رمزگذاری پیام</button><button type="button" data-prompt="می‌خواهم یک پیام را رمزگشایی کنم">↗ &nbsp; رمزگشایی پیام</button></div><form id="chat-form" class="chat-form"><label class="sr-only" for="chat-input">پیام به دستیار</label><input id="chat-input" placeholder="به رموش بگو چه کاری داری..." maxlength="2000" autocomplete="off"><button id="send-button" type="submit" aria-label="ارسال پیام">↑</button></form><p class="chat-warning">گفت‌وگو برای هوش مصنوعی ارسال می‌شود؛ متن محرمانه و عبارت عبور را اینجا ننویسید.</p></div>
-          </section>
-          <section class="tool panel" aria-labelledby="tool-title"><div class="panel-head"><div class="head-icon lime">⌘</div><div><h2 id="tool-title">میز کار امن</h2><p>پیام خودت را اینجا آماده کن</p></div><span class="local-tag">● محلی</span></div>
-            <div class="tool-body"><div class="mode-switch" role="group" aria-label="نوع عملیات"><button type="button" class="active" data-mode="encrypt">✧ &nbsp; رمزگذاری</button><button type="button" data-mode="decrypt">↗ &nbsp; رمزگشایی</button></div>
-              <div class="tool-intro"><div><span class="mini-label">ابزار شما</span><h3 id="tool-heading">یک راز تازه بساز.</h3><p id="tool-description">پیامت را بنویس و یک عبارت عبور انتخاب کن.</p></div><span class="tool-symbol" aria-hidden="true">✳</span></div>
-              <form id="crypto-form"><label for="source" id="source-label">پیام اصلی</label><textarea id="source" placeholder="پیامی که می‌خواهی رمزگذاری کنی..." required></textarea><div class="field-title"><label for="passphrase">عبارت عبور</label><span>فقط در مرورگر شما</span></div><div class="password-field"><input id="passphrase" type="password" placeholder="یک عبارت عبور انتخاب کن" autocomplete="new-password" required><button id="toggle-password" type="button" aria-label="نمایش عبارت عبور">نمایش</button></div><p class="field-hint">برای رمزگشایی به همین عبارت نیاز داری؛ آن را در جایی امن نگه دار.</p><button type="submit" id="crypto-button" class="primary-button">رمزگذاری پیام <span>←</span></button></form>
-              <div id="result-area" class="result-area" hidden><div class="result-head"><label for="result" id="result-label">پیام رمزگذاری‌شده</label><button id="copy-result" type="button">کپی کردن ◧</button></div><textarea id="result" readonly></textarea><p id="result-hint">پیام رمزگذاری‌شده را همراه با عبارت عبور، جداگانه به گیرنده برسان.</p></div><p id="crypto-error" class="error" role="alert"></p>
-            </div>
-          </section>
-        </div>
-        <footer><span>✳ &nbsp; رموش، جایی برای حرف‌های خصوصی</span><span>ساخته‌شده با دقت، برای آرامش خیال شما</span></footer>
-      </div>
-    </main>
-  </div>
-  <script type="module" src="/app.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
