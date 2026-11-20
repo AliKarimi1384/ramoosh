@@ -1,14 +1,15 @@
 import { StrictMode, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { decryptMessage, encryptMessage } from '../lib/crypto.js';
+import logoMark from './ramoosh-mark.svg';
 import '../style.css';
 
 type Mode = 'encrypt' | 'decrypt';
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type Entry = { id: number; kind: 'message'; message: ChatMessage } | { id: number; kind: 'tool' };
 
-function Mark({ large = false }: { large?: boolean }) {
-  return large ? <svg viewBox="0 0 64 64" fill="none"><path d="M32 8 52.8 20v24L32 56 11.2 44V20L32 8Z"/><path d="M22 32h20M32 22v20"/><circle cx="32" cy="32" r="5"/></svg> : <svg viewBox="0 0 40 40" fill="none"><path d="M20 3.5 33.5 11.3v15.4L20 34.5 6.5 26.7V11.3L20 3.5Z"/><path d="M13.5 20h13M20 13.5v13"/><circle cx="20" cy="20" r="3.2"/></svg>;
+function Mark() {
+  return <img className="logo-mark" src={logoMark} alt="" />;
 }
 
 function LockIcon({ open = false }: { open?: boolean }) {
@@ -124,7 +125,7 @@ function App() {
     <main className="chat-layout" aria-label="گفت‌وگو با رموش">
       <div className="messages" role="log" aria-live="polite" ref={scrollRef}>
         {entries.length === 0 && <section className="welcome" aria-labelledby="welcome-title">
-          <div className="welcome-emblem" aria-hidden="true"><span className="emblem-orbit orbit-one"/><span className="emblem-orbit orbit-two"/><Mark large /></div>
+          <div className="welcome-emblem" aria-hidden="true"><span className="emblem-orbit orbit-one"/><span className="emblem-orbit orbit-two"/><Mark /></div>
           <div className="welcome-kicker"><span/> فضای امن، فکر روشن</div><h1 id="welcome-title">سلام، من رموشم<span>.</span></h1><p>کنارتم تا دنیای رمزنگاری رو ساده‌تر کنی.<br/>از کجا شروع کنیم؟</p>
           <div className="suggestions" aria-label="شروع سریع">{(['encrypt', 'decrypt'] as const).map(item => <button type="button" key={item} onClick={() => setMode(item)}><span className="suggestion-icon"><LockIcon open={item === 'decrypt'}/></span><span><strong>{item === 'encrypt' ? 'رمزگذاری پیام' : 'رمزگشایی پیام'}</strong><small>{item === 'encrypt' ? 'یک پیام امن بساز' : 'یک پیام را باز کن'}</small></span><span className="suggestion-plus">+</span></button>)}</div>
         </section>}

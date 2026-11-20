@@ -36,3 +36,10 @@ body{min-width:0}
   .suggestions button{transition:none}
   .suggestions button:hover{transform:none}
 }
+
+/* The mark combines the lock and connected network from Ramoosh's identity. */
+.logo-mark{display:block;object-fit:contain}
+.brand-mark .logo-mark{width:32px;height:35px}
+.welcome-emblem .logo-mark{position:relative;width:72px;height:81px;filter:drop-shadow(0 0 12px #64d9a33b)}
+@media(max-height:700px){.welcome-emblem .logo-mark{width:55px;height:62px}}
+@media(max-height:520px){.welcome-emblem .logo-mark{width:44px;height:49px}}
