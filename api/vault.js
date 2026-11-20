@@ -1,3 +1,4 @@
+import { resilientFetch } from '../lib/http-client.js';
 import {
   MAX_VAULT_EXPIRY_MINUTES,
   MAX_VAULT_INTENT_LENGTH,
@@ -77,13 +78,83 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: t.method });
   }
   if (!validateVaultRequest(req.body)) return res.status(400).json({ error: t.invalid });
-  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: t.missingKey });
+
+  const groqKey = process.env.GROQ_API_KEY || (process.env.OPENAI_API_KEY?.startsWith('gsk_') ? process.env.OPENAI_API_KEY : null);
+  const openAiKey = process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.startsWith('gsk_') ? process.env.OPENAI_API_KEY : null;
+
+  if (!groqKey && !openAiKey) return res.status(503).json({ error: t.missingKey });
+
+  const useGroq = Boolean(groqKey && (process.env.LLM_PROVIDER === 'groq' || !openAiKey || process.env.GROQ_API_KEY));
+
+  if (useGroq) {
+    const groqModel = process.env.GROQ_MODEL || (process.env.OPENAI_API_KEY?.startsWith('gsk_') && process.env.OPENAI_MODEL ? process.env.OPENAI_MODEL : 'qwen/qwen3.8-27b');
+    const groqBaseUrl = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
+    const context = { payload_ref: VAULT_PAYLOAD_REF, keys: req.body.keys, previous_plan: req.body.previous_plan };
+    const last = req.body.messages.at(-1);
+
+    const chatMessages = [
+      { role: 'system', content: `${instructions}\n${t.instruction}` },
+      ...req.body.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
+      {
+        role: 'user',
+        content: `System Context: ${JSON.stringify(context)}\nUser intent: ${last.content}`,
+      },
+    ];
+
+    const chatTools = [
+      {
+        type: 'function',
+        function: {
+          name: vaultTool.name,
+          description: vaultTool.description,
+          parameters: vaultTool.parameters,
+        },
+      },
+    ];
+
+    try {
+      const response = await resilientFetch(`${groqBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: chatMessages,
+          tools: chatTools,
+          tool_choice: 'auto',
+          max_tokens: 2400,
+          temperature: 0.1,
+        }),
+        signal: AbortSignal.timeout(25000),
+      });
+
+      if (!response.ok) return res.status(502).json({ error: t.connection });
+      const data = await response.json();
+      const choice = data?.choices?.[0];
+      const calls = choice?.message?.tool_calls || [];
+      if (calls.length) {
+        const [call] = calls;
+        if (calls.length !== 1 || call.function?.name !== vaultTool.name || typeof call.function?.arguments !== 'string' || call.function.arguments.length > 4000) {
+          return res.status(422).json({ error: t.invalidReply });
+        }
+        let plan;
+        try { plan = JSON.parse(call.function.arguments); } catch { return res.status(422).json({ error: t.invalidReply }); }
+        if (!validatePlan(plan, req.body.keys)) return res.status(422).json({ error: t.invalidReply });
+        return res.status(200).json({ plan, reply: null });
+      }
+
+      const reply = choice?.message?.content?.trim();
+      if (!reply || reply.length > MAX_VAULT_INTENT_LENGTH || containsKeyMaterial(reply)) return res.status(502).json({ error: t.invalidReply });
+      return res.status(200).json({ plan: null, reply });
+    } catch {
+      return res.status(502).json({ error: t.connection });
+    }
+  }
 
   let output;
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await resilientFetch('https://api.openai.com/v1/responses', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
         instructions: `${instructions}\n${t.instruction}`,

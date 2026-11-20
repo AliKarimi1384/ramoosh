@@ -134,3 +134,51 @@ test('rejects mismatched keys, invalid limits, and unrecognized tool calls', asy
   result.output = [{ ...toolCall(), arguments: '{' }];
   assert.equal((await callVault(request)).statusCode, 422);
 });
+
+test('plans a vault policy via Groq tool call with light LLM', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalGroqKey = process.env.GROQ_API_KEY;
+  const originalOpenAIKey = process.env.OPENAI_API_KEY;
+  try {
+    delete process.env.OPENAI_API_KEY;
+    process.env.GROQ_API_KEY = 'gsk_vault_test';
+    let requestUrl;
+    let payload;
+    globalThis.fetch = async (url, options) => {
+      requestUrl = url;
+      payload = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                tool_calls: [
+                  {
+                    id: 'call_vault_1',
+                    type: 'function',
+                    function: { name: 'propose_vault', arguments: JSON.stringify(plan) },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      };
+    };
+
+    const res = await callVault(request);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, { plan, reply: null });
+    assert.equal(requestUrl, 'https://api.groq.com/openai/v1/chat/completions');
+    assert.equal(payload.model, 'qwen/qwen3.8-27b');
+    assert.equal(payload.tools[0].function.name, 'propose_vault');
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = originalGroqKey;
+    if (originalOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalOpenAIKey;
+  }
+});

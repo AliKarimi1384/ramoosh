@@ -1,3 +1,5 @@
+import { resilientFetch } from '../lib/http-client.js';
+
 const INSTRUCTIONS_FA = `تو دستیار فارسی «رموش» هستی. در مورد رمزگذاری و رمزگشایی پیام به اختصار راهنمایی کن.
 وقتی کاربر می‌خواهد پیامی را رمزگذاری یا رمزگشایی کند ابزار مربوط را فراخوانی کن.
 ابزار هیچ ورودی محرمانه‌ای ندارد؛ متن و گذرواژه بعداً فقط در مرورگر دریافت می‌شوند.
@@ -49,13 +51,78 @@ export default async function handler(req, res) {
       messages.at(-1).role !== 'user') {
     return res.status(400).json({ error: t.invalid });
   }
-  if (!process.env.OPENAI_API_KEY) {
+  const groqKey = process.env.GROQ_API_KEY || (process.env.OPENAI_API_KEY?.startsWith('gsk_') ? process.env.OPENAI_API_KEY : null);
+  const openAiKey = process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.startsWith('gsk_') ? process.env.OPENAI_API_KEY : null;
+
+  if (!groqKey && !openAiKey) {
     return res.status(503).json({ error: t.missingKey });
   }
+
+  const useGroq = Boolean(groqKey && (process.env.LLM_PROVIDER === 'groq' || !openAiKey || process.env.GROQ_API_KEY));
+
+  if (useGroq) {
+    const groqModel = process.env.GROQ_MODEL || (process.env.OPENAI_API_KEY?.startsWith('gsk_') && process.env.OPENAI_MODEL ? process.env.OPENAI_MODEL : 'qwen/qwen3.8-27b');
+    const groqBaseUrl = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
+    const groqTools = [
+      {
+        type: 'function',
+        function: {
+          name: 'encrypt_message',
+          description: 'Open the local message encryption tool.',
+          parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'decrypt_message',
+          description: 'Open the local message decryption tool.',
+          parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        },
+      },
+    ];
+
+    try {
+      const response = await resilientFetch(`${groqBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: 'system', content: t.instructions },
+            ...messages,
+          ],
+          tools: groqTools,
+          tool_choice: 'auto',
+          max_tokens: 300,
+          temperature: 0.1,
+        }),
+        signal: AbortSignal.timeout(25000),
+      });
+
+      if (!response.ok) return res.status(502).json({ error: t.connection });
+      const data = await response.json();
+      const choice = data.choices?.[0];
+      const toolCall = choice?.message?.tool_calls?.find(c =>
+        ['encrypt_message', 'decrypt_message'].includes(c.function?.name)
+      );
+      const action = toolCall ? (toolCall.function.name === 'encrypt_message' ? 'encrypt' : 'decrypt') : null;
+      const text = choice?.message?.content?.trim();
+      const reply = action ? t[action] : text;
+      if (!reply) return res.status(502).json({ error: t.invalidReply });
+      return res.status(200).json({ reply, action });
+    } catch {
+      return res.status(502).json({ error: t.connection });
+    }
+  }
+
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await resilientFetch('https://api.openai.com/v1/responses', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4.1-mini', instructions: t.instructions, input: messages, tools, parallel_tool_calls: false, max_output_tokens: 300, store: false }),
       signal: AbortSignal.timeout(25000),
     });
