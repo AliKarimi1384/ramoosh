@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { decryptMessage, encryptMessage } from '../lib/crypto.js';
+import { readChatStream } from '../lib/chat-stream.js';
 import logoMark from './ramoosh-mark.svg';
 import { translations, type Language } from './i18n';
 import { VaultWorkspace } from './VaultWorkspace';
@@ -10,7 +11,7 @@ import '../style.css';
 type Mode = 'encrypt' | 'decrypt';
 type Theme = 'light' | 'dark';
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
-type Entry = { id: number; kind: 'message'; message: ChatMessage } | { id: number; kind: 'tool' };
+type Entry = { id: number; kind: 'message'; message: ChatMessage; streaming?: boolean } | { id: number; kind: 'tool' };
 
 function Mark() {
   return <img className="logo-mark" src={logoMark} alt="" />;
@@ -148,19 +149,24 @@ function App() {
     busyRef.current = true; setBusy(true); setInput('');
     const userMessage: ChatMessage = { role: 'user', content: text };
     history.current.push(userMessage); addMessage(userMessage);
+    const replyId = ++nextId.current;
+    setEntries(current => [...current, { id: replyId, kind: 'message', message: { role: 'assistant', content: '' }, streaming: true }]);
     const request = new AbortController(); controller.current = request;
     try {
-      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history.current.slice(-20), language }), signal: request.signal });
-      const data = await response.json();
+      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history.current.slice(-20), language, stream: true }), signal: request.signal });
+      const data = await readChatStream(response, (delta: string) => {
+        if (version !== conversationVersion.current) return;
+        setEntries(current => current.map(entry => entry.id === replyId && entry.kind === 'message' ? { ...entry, message: { ...entry.message, content: entry.message.content + delta } } : entry));
+      });
       if (version !== conversationVersion.current) return;
-      if (!response.ok || typeof data.reply !== 'string') throw new Error(data.error || 'Chat request failed');
       const reply: ChatMessage = { role: 'assistant', content: data.reply };
-      history.current.push(reply); addMessage(reply);
+      history.current.push(reply);
+      setEntries(current => current.map(entry => entry.id === replyId && entry.kind === 'message' ? { ...entry, message: reply, streaming: false } : entry));
       if (data.action === 'encrypt' || data.action === 'decrypt') setMode(data.action);
     } catch (err) {
       if (version !== conversationVersion.current) return;
       history.current.pop();
-      addMessage({ role: 'assistant', content: t.chatError });
+      setEntries(current => current.map(entry => entry.id === replyId && entry.kind === 'message' ? { ...entry, message: { ...entry.message, content: entry.message.content ? `${entry.message.content}\n\n${t.chatError}` : t.chatError }, streaming: false } : entry));
       console.error('Chat request failed:', err);
     } finally {
       if (version === conversationVersion.current) { busyRef.current = false; setBusy(false); controller.current = null; inputRef.current?.focus(); }
@@ -197,7 +203,7 @@ function App() {
             <button type="button" className="vault-suggestion" onClick={() => setShowVault(true)}><span className="suggestion-icon"><LockIcon/></span><span><strong>{vaultCopy.title}</strong><small>{vaultCopy.intro}</small></span><span className="suggestion-plus">+</span></button>
           </div>
         </section>}
-        {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><span className="avatar" aria-hidden="true">{entry.message.role === 'assistant' ? '✳' : t.userAvatar}</span><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className="bubble" dir="auto">{entry.message.content}</div></div></div> : <section className="crypto-card" aria-labelledby="tool-heading" key={entry.id}>
+        {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><span className="avatar" aria-hidden="true">{entry.message.role === 'assistant' ? '✳' : t.userAvatar}</span><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className="bubble" dir="auto" aria-live={entry.streaming ? 'off' : undefined}>{entry.message.content || (entry.streaming ? t.thinking : '')}</div></div></div> : <section className="crypto-card" aria-labelledby="tool-heading" key={entry.id}>
           <div className="crypto-card-head"><div><span className="local-label"><span/> {t.local}</span><h2 id="tool-heading">{encrypting ? t.encryptMessage : t.decryptMessage}</h2><p>{encrypting ? t.encryptDescription : t.decryptDescription}</p></div><span className="card-lock" aria-hidden="true">⌁</span></div>
           <div className="mode-switch" role="group" aria-label={t.operation}>{(['encrypt', 'decrypt'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => setMode(item)}>{item === 'encrypt' ? t.encrypt : t.decrypt}</button>)}</div>
           <form onSubmit={handleCrypto}><label htmlFor="source">{encrypting ? t.originalMessage : t.encryptedMessage}</label><textarea id="source" dir="auto" value={source} onChange={event => setSource(event.target.value)} placeholder={encrypting ? t.encryptPlaceholder : t.decryptPlaceholder} required/><div className="field-title"><label htmlFor="passphrase">{t.passphrase}</label><span>{t.browserOnly}</span></div><div className="password-field"><input id="passphrase" type={showPassword ? 'text' : 'password'} value={passphrase} onChange={event => setPassphrase(event.target.value)} placeholder={encrypting ? t.choosePassphrase : t.enterPassphrase} autoComplete="new-password" required/><button type="button" aria-label={showPassword ? t.hidePassphrase : t.showPassphrase} onClick={() => setShowPassword(!showPassword)}>{showPassword ? t.hide : t.show}</button></div><p className="field-hint">{t.passphraseHint}</p><button type="submit" className="primary-button" disabled={working}>{encrypting ? t.encryptMessage : t.decryptMessage}</button></form>

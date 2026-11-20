@@ -1,4 +1,5 @@
 import { resilientFetch } from '../lib/http-client.js';
+import { streamChat } from '../lib/llm-stream.js';
 
 const INSTRUCTIONS_FA = `تو دستیار فارسی «رموش» هستی. در مورد رمزگذاری و رمزگشایی پیام به اختصار راهنمایی کن.
 وقتی کاربر می‌خواهد پیامی را رمزگذاری یا رمزگشایی کند ابزار مربوط را فراخوانی کن.
@@ -58,6 +59,12 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: t.missingKey });
   }
 
+  const streaming = req.body?.stream === true;
+  const controller = new AbortController();
+  const onClose = () => { if (!res.writableEnded) controller.abort(); };
+  res.on?.('close', onClose);
+  const signal = AbortSignal.any([AbortSignal.timeout(25000), controller.signal]);
+
   const useGroq = Boolean(groqKey && (process.env.LLM_PROVIDER === 'groq' || !openAiKey || process.env.GROQ_API_KEY));
 
   if (useGroq) {
@@ -99,11 +106,13 @@ export default async function handler(req, res) {
           tool_choice: 'auto',
           max_tokens: 300,
           temperature: 0.1,
+          ...(streaming ? { stream: true } : {}),
         }),
-        signal: AbortSignal.timeout(25000),
+        signal,
       });
 
       if (!response.ok) return res.status(502).json({ error: t.connection });
+      if (streaming) return await streamChat(response, res, 'groq', t);
       const data = await response.json();
       const choice = data.choices?.[0];
       const toolCall = choice?.message?.tool_calls?.find(c =>
@@ -123,10 +132,11 @@ export default async function handler(req, res) {
     const response = await resilientFetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4.1-mini', instructions: t.instructions, input: messages, tools, parallel_tool_calls: false, max_output_tokens: 300, store: false }),
-      signal: AbortSignal.timeout(25000),
+      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4.1-mini', instructions: t.instructions, input: messages, tools, parallel_tool_calls: false, max_output_tokens: 300, store: false, ...(streaming ? { stream: true } : {}) }),
+      signal,
     });
     if (!response.ok) return res.status(502).json({ error: t.connection });
+    if (streaming) return await streamChat(response, res, 'openai', t);
     const data = await response.json();
     const call = data.output?.find(item => item.type === 'function_call' && ['encrypt_message', 'decrypt_message'].includes(item.name));
     const action = call ? (call.name === 'encrypt_message' ? 'encrypt' : 'decrypt') : null;
@@ -138,3 +148,5 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: t.connection });
   }
 }
+
+

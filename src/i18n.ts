@@ -14,7 +14,7 @@ export const translations = {
     passphraseHint: 'برای رمزگشایی به همین عبارت نیاز داری؛ آن را در جایی امن نگه دار.', copy: 'کپی کردن', copied: 'کپی شد ✓', copyManually: 'متن را کپی کن',
     encryptedHint: 'پیام رمزگذاری‌شده و عبارت عبور را جداگانه و از راهی امن به گیرنده برسان.', decryptedHint: 'پیام بازشده تنها در همین مرورگر نمایش داده می‌شود.',
     decryptError: 'رمزگشایی انجام نشد. پیام و عبارت عبور را بررسی کن.', encryptError: 'رمزگذاری انجام نشد. لطفاً مرورگر و ورودی‌ها را بررسی کن.',
-    chatError: 'اتصال به دستیار برقرار نشد. دوباره تلاش کن؛ ابزار رمزنگاری محلی همچنان در دسترس است.', chatInput: 'پیام به دستیار', chatPlaceholder: 'از رموش بپرس...', yourMessage: 'پیام شما', send: 'ارسال پیام',
+    chatError: 'اتصال به دستیار برقرار نشد. دوباره تلاش کن؛ ابزار رمزنگاری محلی همچنان در دسترس است.', thinking: 'در حال پاسخ‌گویی…', chatInput: 'پیام به دستیار', chatPlaceholder: 'از رموش بپرس...', yourMessage: 'پیام شما', send: 'ارسال پیام',
     warning: 'متن گفت‌وگو به هوش مصنوعی ارسال می‌شود؛ اطلاعات محرمانه را اینجا ننویسید.', title: 'رموش | دستیار رمزنگاری', description: 'رموش، فضای ساده‌ای برای گفت‌وگو درباره رمزنگاری و پردازش محلی پیام‌ها',
   },
   en: {
@@ -30,7 +30,7 @@ export const translations = {
     passphraseHint: 'You will need this passphrase to decrypt the message; keep it somewhere safe.', copy: 'Copy', copied: 'Copied ✓', copyManually: 'Copy the text',
     encryptedHint: 'Send the encrypted message and passphrase to the recipient separately and securely.', decryptedHint: 'The decrypted message is shown only in this browser.',
     decryptError: 'Decryption failed. Check the message and passphrase.', encryptError: 'Encryption failed. Check your browser and inputs.',
-    chatError: 'Could not connect to the assistant. Try again; the local encryption tool is still available.', chatInput: 'Message to the assistant', chatPlaceholder: 'Ask Ramoosh...', yourMessage: 'Your message', send: 'Send message',
+    chatError: 'Could not connect to the assistant. Try again; the local encryption tool is still available.', thinking: 'Thinking…', chatInput: 'Message to the assistant', chatPlaceholder: 'Ask Ramoosh...', yourMessage: 'Your message', send: 'Send message',
     warning: 'Chat messages are sent to AI; do not enter confidential information here.', title: 'Ramoosh | Cryptography assistant', description: 'Ramoosh is a simple space to discuss cryptography and process messages locally.',
   },
 } satisfies Record<Language, Record<string, string>>;

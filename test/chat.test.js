@@ -119,3 +119,119 @@ test('supports Groq API with light LLM (qwen/qwen3.8-27b)', async () => {
     else process.env.OPENAI_API_KEY = originalOpenAIKey;
   }
 });
+
+function streamResponse() {
+  return {
+    headers: {}, chunks: [], writableEnded: false, destroyed: false,
+    setHeader(k, v) { this.headers[k] = v; },
+    status(n) { this.statusCode = n; return this; },
+    json(body) { this.body = body; return this; },
+    write(chunk) { this.chunks.push(chunk); },
+    end() { this.writableEnded = true; },
+  };
+}
+
+function providerStream(events) {
+  const bytes = new TextEncoder().encode(events.map(event => `data: ${typeof event === 'string' ? event : JSON.stringify(event)}\r\n\r\n`).join(''));
+  return new ReadableStream({
+    start(controller) {
+      for (let i = 0; i < bytes.length; i += 3) controller.enqueue(bytes.slice(i, i + 3));
+      controller.close();
+    },
+  });
+}
+
+function sentEvents(res) {
+  return res.chunks.filter(chunk => chunk.startsWith('data: ')).map(chunk => JSON.parse(chunk.slice(6)));
+}
+
+test('streams OpenAI text across byte boundaries and reports the final reply', async () => {
+  const fetch = globalThis.fetch;
+  const openai = process.env.OPENAI_API_KEY;
+  const groq = process.env.GROQ_API_KEY;
+  try {
+    process.env.OPENAI_API_KEY = 'test-key';
+    delete process.env.GROQ_API_KEY;
+    let payload;
+    globalThis.fetch = async (_url, options) => {
+      payload = JSON.parse(options.body);
+      return { ok: true, body: providerStream([
+        { type: 'response.output_text.delta', delta: 'سلام ' },
+        { type: 'response.output_text.delta', delta: 'دنیا' },
+        { type: 'response.completed', response: { output: [] } },
+        '[DONE]',
+      ]) };
+    };
+    const res = streamResponse();
+    await handler({ method: 'POST', body: { messages: [{ role: 'user', content: 'سلام' }], stream: true } }, res);
+    assert.equal(payload.stream, true);
+    assert.match(res.headers['Content-Type'], /^text\/event-stream/);
+    assert.deepEqual(sentEvents(res), [
+      { type: 'delta', text: 'سلام ' },
+      { type: 'delta', text: 'دنیا' },
+      { type: 'done', reply: 'سلام دنیا', action: null },
+    ]);
+    assert.equal(res.writableEnded, true);
+  } finally {
+    globalThis.fetch = fetch;
+    if (openai === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = openai;
+    if (groq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = groq;
+  }
+});
+
+test('streams Groq tool calls and reports interrupted streams as errors', async () => {
+  const fetch = globalThis.fetch;
+  const groq = process.env.GROQ_API_KEY;
+  try {
+    process.env.GROQ_API_KEY = 'gsk_test';
+    globalThis.fetch = async () => ({ ok: true, body: providerStream([
+      { choices: [{ delta: { content: 'Working' }, finish_reason: null }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'encrypt_' } }] }, finish_reason: null }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'message' } }] }, finish_reason: 'tool_calls' }] },
+      '[DONE]',
+    ]) });
+    const res = streamResponse();
+    await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: 'encrypt' }], stream: true } }, res);
+    assert.deepEqual(sentEvents(res), [
+      { type: 'delta', text: 'Working' },
+      { type: 'done', reply: 'The encryption tool is ready. Enter your message and passphrase in the secure form.', action: 'encrypt' },
+    ]);
+    globalThis.fetch = async () => ({ ok: true, body: providerStream([
+      { choices: [{ delta: { content: 'partial' }, finish_reason: null }] },
+    ]) });
+    const interrupted = streamResponse();
+    await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: 'hello' }], stream: true } }, interrupted);
+    assert.deepEqual(sentEvents(interrupted), [
+      { type: 'delta', text: 'partial' },
+      { type: 'error', error: 'Could not connect to the AI service. Please try again.' },
+    ]);
+  } finally {
+    globalThis.fetch = fetch;
+    if (groq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = groq;
+  }
+});
+
+test('aborts the upstream request when the streaming client disconnects', async () => {
+  const fetch = globalThis.fetch;
+  const openai = process.env.OPENAI_API_KEY;
+  const groq = process.env.GROQ_API_KEY;
+  try {
+    process.env.OPENAI_API_KEY = 'test-key';
+    delete process.env.GROQ_API_KEY;
+    let signal;
+    globalThis.fetch = async (_url, options) => {
+      signal = options.signal;
+      return { ok: true, body: { async *[Symbol.asyncIterator]() { if (signal.aborted) throw new Error('aborted'); } } };
+    };
+    const res = streamResponse();
+    let close;
+    res.on = (event, callback) => { if (event === 'close') close = callback; };
+    res.write = () => { res.destroyed = true; close(); };
+    await handler({ method: 'POST', body: { messages: [{ role: 'user', content: 'hello' }], stream: true } }, res);
+    assert.equal(signal.aborted, true);
+  } finally {
+    globalThis.fetch = fetch;
+    if (openai === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = openai;
+    if (groq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = groq;
+  }
+});
