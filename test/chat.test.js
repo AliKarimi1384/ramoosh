@@ -20,11 +20,21 @@ test('validates request and maps model tool call to client action', async () => 
     await handler({ method: 'POST', body: { messages: [{ role: 'user', content: 'رمزگذاری کن' }] } }, res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.action, 'encrypt');
+    assert.match(res.body.reply, /ابزار رمزگذاری/);
+    assert.match(payload.instructions, /فارسی/);
     assert.equal(payload.store, false);
     assert.deepEqual(payload.tools[0].parameters.properties, {});
     const invalid = response();
     await handler({ method: 'POST', body: { messages: [{ role: 'system', content: 'bad' }] } }, invalid);
     assert.equal(invalid.statusCode, 400);
+    const english = response();
+    await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: 'Encrypt a message' }] } }, english);
+    assert.equal(english.body.action, 'encrypt');
+    assert.match(english.body.reply, /encryption tool/i);
+    assert.match(payload.instructions, /Respond in English/);
+    const invalidEnglish = response();
+    await handler({ method: 'POST', body: { language: 'en', messages: [] } }, invalidEnglish);
+    assert.equal(invalidEnglish.body.error, 'The submitted messages are invalid.');
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
