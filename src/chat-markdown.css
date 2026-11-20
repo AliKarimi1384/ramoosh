@@ -1,0 +1,17 @@
+/* Markdown blocks need their own spacing instead of the plain-text bubble's pre-wrap. */
+.bubble.markdown{white-space:normal}
+.markdown > :first-child{margin-top:0}
+.markdown > :last-child{margin-bottom:0}
+.markdown p,.markdown ul,.markdown ol,.markdown blockquote,.markdown pre,.markdown table{margin:0 0 1em}
+.markdown ul,.markdown ol{padding-inline-start:1.7em}
+.markdown li > p{margin:0}
+.markdown a{color:#9ee1bd;text-decoration:underline;text-underline-offset:3px}
+.markdown blockquote{border-inline-start:3px solid #6da686;padding-inline-start:12px;color:inherit;opacity:.85}
+.markdown code{font-family:Consolas,monospace;font-size:.9em;background:#0e1915;border-radius:4px;padding:.15em .35em;direction:ltr;unicode-bidi:isolate}
+.markdown pre{max-width:100%;overflow-x:auto;background:#0e1915;border-radius:9px;padding:12px;direction:ltr;text-align:left;white-space:pre}
+.markdown pre code{padding:0;background:none;unicode-bidi:normal}
+.markdown table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse}
+.markdown th,.markdown td{border:1px solid #466054;padding:4px 9px;text-align:start}
+html[data-theme="light"] .markdown a{color:#276d4b}
+html[data-theme="light"] .markdown code,html[data-theme="light"] .markdown pre{background:#e7f1e9}
+html[data-theme="light"] .markdown th,html[data-theme="light"] .markdown td{border-color:#bed4c3}

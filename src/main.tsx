@@ -5,8 +5,11 @@ import { readChatStream } from '../lib/chat-stream.js';
 import logoMark from './ramoosh-mark.svg';
 import { translations, type Language } from './i18n';
 import { VaultWorkspace } from './VaultWorkspace';
+import { ChatMarkdown } from './ChatMarkdown';
+import { ChatAvatar } from './ChatAvatar';
 import { vaultTranslations } from './vault-i18n';
 import '../style.css';
+import './chat-markdown.css';
 
 type Mode = 'encrypt' | 'decrypt';
 type Theme = 'light' | 'dark';
@@ -203,7 +206,7 @@ function App() {
             <button type="button" className="vault-suggestion" onClick={() => setShowVault(true)}><span className="suggestion-icon"><LockIcon/></span><span><strong>{vaultCopy.title}</strong><small>{vaultCopy.intro}</small></span><span className="suggestion-plus">+</span></button>
           </div>
         </section>}
-        {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><span className="avatar" aria-hidden="true">{entry.message.role === 'assistant' ? '✳' : t.userAvatar}</span><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className="bubble" dir="auto" aria-live={entry.streaming ? 'off' : undefined}>{entry.message.content || (entry.streaming ? t.thinking : '')}</div></div></div> : <section className="crypto-card" aria-labelledby="tool-heading" key={entry.id}>
+        {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><ChatAvatar role={entry.message.role} /><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className={`bubble${entry.message.role === 'assistant' ? ' markdown' : ''}`} dir="auto" aria-live={entry.streaming ? 'off' : undefined}>{entry.message.role === 'assistant' && entry.message.content ? <ChatMarkdown content={entry.message.content} /> : entry.message.content || (entry.streaming ? t.thinking : '')}</div></div></div> : <section className="crypto-card" aria-labelledby="tool-heading" key={entry.id}>
           <div className="crypto-card-head"><div><span className="local-label"><span/> {t.local}</span><h2 id="tool-heading">{encrypting ? t.encryptMessage : t.decryptMessage}</h2><p>{encrypting ? t.encryptDescription : t.decryptDescription}</p></div><span className="card-lock" aria-hidden="true">⌁</span></div>
           <div className="mode-switch" role="group" aria-label={t.operation}>{(['encrypt', 'decrypt'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => setMode(item)}>{item === 'encrypt' ? t.encrypt : t.decrypt}</button>)}</div>
           <form onSubmit={handleCrypto}><label htmlFor="source">{encrypting ? t.originalMessage : t.encryptedMessage}</label><textarea id="source" dir="auto" value={source} onChange={event => setSource(event.target.value)} placeholder={encrypting ? t.encryptPlaceholder : t.decryptPlaceholder} required/><div className="field-title"><label htmlFor="passphrase">{t.passphrase}</label><span>{t.browserOnly}</span></div><div className="password-field"><input id="passphrase" type={showPassword ? 'text' : 'password'} value={passphrase} onChange={event => setPassphrase(event.target.value)} placeholder={encrypting ? t.choosePassphrase : t.enterPassphrase} autoComplete="new-password" required/><button type="button" aria-label={showPassword ? t.hidePassphrase : t.showPassphrase} onClick={() => setShowPassword(!showPassword)}>{showPassword ? t.hide : t.show}</button></div><p className="field-hint">{t.passphraseHint}</p><button type="submit" className="primary-button" disabled={working}>{encrypting ? t.encryptMessage : t.decryptMessage}</button></form>
