@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { webcrypto } from 'node:crypto';
+import { webcrypto, publicEncrypt, privateDecrypt } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -16,6 +16,7 @@ import {
   signMessage,
   verifySignature,
   generateEncryptionKeyPair,
+  encryptionKeyToPem,
   encryptWithPublicKey,
   decryptWithPrivateKey,
   encryptMessage,
@@ -123,6 +124,29 @@ test('Asymmetric Encryption: RSA-OAEP encrypt and decrypt round-trip', async () 
   // Other key cannot decrypt
   const otherKeyPair = await generateEncryptionKeyPair({ modulusLength: 2048 });
   await assert.rejects(decryptWithPrivateKey(encrypted, otherKeyPair.privateKey));
+});
+
+test('Asymmetric Encryption: PEM keys interoperate and legacy JWK JSON remains usable', async () => {
+  const keyPair = await generateEncryptionKeyPair();
+  const publicPem = await encryptionKeyToPem(keyPair.publicKey, 'public');
+  const privatePem = await encryptionKeyToPem(keyPair.privateKey, 'private');
+  assert.match(publicPem, /^-----BEGIN PUBLIC KEY-----\n/);
+  assert.match(privatePem, /^-----BEGIN PRIVATE KEY-----\n/);
+
+  const message = 'پیام آزمایشی';
+  const encrypted = await encryptWithPublicKey(message, publicPem);
+  assert.equal(await decryptWithPrivateKey(encrypted, privatePem), message);
+  assert.equal(await decryptWithPrivateKey(encrypted, JSON.stringify(keyPair.privateKey)), message);
+  const legacyEncrypted = await encryptWithPublicKey(message, JSON.stringify(keyPair.publicKey));
+  assert.equal(await decryptWithPrivateKey(legacyEncrypted, privatePem), message);
+
+  const nodeEncrypted = publicEncrypt({ key: publicPem, oaepHash: 'sha256' }, Buffer.from(message));
+  assert.equal(await decryptWithPrivateKey(`rsa1.${nodeEncrypted.toString('base64url')}`, privatePem), message);
+  const encryptedBytes = Buffer.from(encrypted.slice(5), 'base64url');
+  assert.equal(privateDecrypt({ key: privatePem, oaepHash: 'sha256' }, encryptedBytes).toString(), message);
+  await assert.rejects(encryptWithPublicKey(message, privatePem));
+  await assert.rejects(decryptWithPrivateKey(encrypted, publicPem));
+  await assert.rejects(encryptWithPublicKey(message, publicPem.replace('BEGIN PUBLIC KEY', 'BEGIN INVALID KEY')));
 });
 
 test('Symmetric rm2: upgraded 600k iterations and AAD protection', async () => {

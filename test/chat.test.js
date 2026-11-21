@@ -23,7 +23,7 @@ test('validates request and maps model tool call to client action', async () => 
     assert.match(res.body.reply, /ابزار رمزگذاری/);
     assert.match(payload.instructions, /فارسی/);
     assert.equal(payload.store, false);
-    assert.deepEqual(payload.tools[0].parameters.properties, {});
+    assert.deepEqual(payload.tools[0].parameters.properties.algorithm.enum, ['aes', 'rsa', null]);
     const invalid = response();
     await handler({ method: 'POST', body: { messages: [{ role: 'system', content: 'bad' }] } }, invalid);
     assert.equal(invalid.statusCode, 400);
@@ -180,7 +180,7 @@ test('opens the local hashing form for both providers, with and without streamin
         assert.equal(result.action, 'hash');
         assert.match(result.reply, /hashing tool/i);
         const tool = payload.tools.map(item => item.function || item).find(item => item.name === 'open_hash_tool');
-        assert.deepEqual(tool.parameters.properties, {});
+        assert.deepEqual(tool.parameters.properties.algorithm.enum, ['SHA-256', 'SHA-384', 'SHA-512', null]);
       }
     }
   } finally {
@@ -227,7 +227,7 @@ test('opens compression and decompression locally for both providers and respons
           assert.equal(result.action, action);
           assert.match(result.reply, action === 'compress' ? /compression tool/i : /decompression tool/i);
           const tool = payload.tools.map(item => item.function || item).find(item => item.name === name);
-          assert.deepEqual(tool.parameters, { type: 'object', properties: {}, required: [], additionalProperties: false });
+          assert.deepEqual(tool.parameters.properties.algorithm.enum, ['gzip', 'deflate', null]);
         }
       }
     }
@@ -262,7 +262,7 @@ test('streams OpenAI text across byte boundaries and reports the final reply', a
     assert.deepEqual(sentEvents(res), [
       { type: 'delta', text: 'سلام ' },
       { type: 'delta', text: 'دنیا' },
-      { type: 'done', reply: 'سلام دنیا', action: null },
+      { type: 'done', reply: 'سلام دنیا', action: null, algorithm: null },
     ]);
     assert.equal(res.writableEnded, true);
   } finally {
@@ -287,7 +287,7 @@ test('streams Groq tool calls and reports interrupted streams as errors', async 
     await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: 'encrypt' }], stream: true } }, res);
     assert.deepEqual(sentEvents(res), [
       { type: 'delta', text: 'Working' },
-      { type: 'done', reply: 'The encryption tool is ready. Choose a cryptography method and enter the details in the form.', action: 'encrypt' },
+      { type: 'done', reply: 'The encryption tool is ready. Enter the details in the form.', action: 'encrypt', algorithm: null },
     ]);
     globalThis.fetch = async () => ({ ok: true, body: providerStream([
       { choices: [{ delta: { content: 'partial' }, finish_reason: null }] },
@@ -324,6 +324,48 @@ test('aborts the upstream request when the streaming client disconnects', async 
     assert.equal(signal.aborted, true);
   } finally {
     globalThis.fetch = fetch;
+    if (openai === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = openai;
+    if (groq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = groq;
+  }
+});
+
+
+test('carries only valid requested algorithms through both providers and response modes', async () => {
+  const originalFetch = globalThis.fetch;
+  const openai = process.env.OPENAI_API_KEY;
+  const groq = process.env.GROQ_API_KEY;
+  try {
+    for (const provider of ['openai', 'groq']) {
+      if (provider === 'openai') { process.env.OPENAI_API_KEY = 'test-key'; delete process.env.GROQ_API_KEY; }
+      else { delete process.env.OPENAI_API_KEY; process.env.GROQ_API_KEY = 'gsk_test'; }
+      for (const stream of [false, true]) {
+        for (const [name, args, expected] of [
+          ['encrypt_message', '{"algorithm":"rsa"}', 'rsa'],
+          ['open_hash_tool', '{"algorithm":"SHA-512"}', 'SHA-512'],
+          ['open_decompress_tool', '{"algorithm":"deflate"}', 'deflate'],
+          ['open_hash_tool', '{"algorithm":"rsa"}', null],
+          ['encrypt_message', '{invalid', null],
+          ['encrypt_message', '{"algorithm":null}', null],
+        ]) {
+          globalThis.fetch = async () => {
+            if (!stream) return { ok: true, json: async () => provider === 'openai'
+              ? { output: [{ type: 'function_call', name, arguments: args }] }
+              : { choices: [{ message: { tool_calls: [{ function: { name, arguments: args } }] } }] } };
+            return { ok: true, body: providerStream(provider === 'openai' ? [
+              { type: 'response.completed', response: { output: [{ type: 'function_call', name, arguments: args }] } }, '[DONE]',
+            ] : [
+              { choices: [{ delta: { tool_calls: [{ index: 0, function: { name, arguments: args.slice(0, 5) } }] } }] },
+              { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(5) } }] }, finish_reason: 'tool_calls' }] }, '[DONE]',
+            ]) };
+          };
+          const res = stream ? streamResponse() : response();
+          await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: 'use my requested algorithm' }], stream } }, res);
+          assert.equal((stream ? sentEvents(res).at(-1) : res.body).algorithm, expected, `${provider} ${stream} ${name} ${args}`);
+        }
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
     if (openai === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = openai;
     if (groq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = groq;
   }

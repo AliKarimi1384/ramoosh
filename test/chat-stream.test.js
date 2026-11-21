@@ -12,8 +12,8 @@ test('delivers UTF-8 deltas before completion and accepts split SSE frames', asy
   for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.deepEqual(deltas, ['سلام']);
-  controller.enqueue(encoder.encode('data: {"type":"done","reply":"سلام","action":"encrypt"}\n\n'));
-  assert.deepEqual(await result, { reply: 'سلام', action: 'encrypt' });
+  controller.enqueue(encoder.encode('data: {"type":"done","reply":"سلام","action":"encrypt","algorithm":"rsa"}\n\n'));
+  assert.deepEqual(await result, { reply: 'سلام', action: 'encrypt', algorithm: 'rsa' });
 });
 
 test('rejects an error event and an incomplete stream', async () => {

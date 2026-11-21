@@ -45,6 +45,7 @@ body{min-width:0}
 @media(max-height:520px){.welcome-emblem .logo-mark{width:44px;height:49px}}
 
 /* Theme control and light palette */
+::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
 .theme-toggle{width:44px;height:44px;display:grid;place-items:center;flex-shrink:0;border:1px solid #31433d;border-radius:11px;background:#17231f;color:#cde5d6}
 .theme-toggle:hover{background:#20342b;border-color:#547664}
 .theme-toggle svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
@@ -174,6 +175,11 @@ html[data-theme="light"] .generated-keys summary{color:#315e40}
 .manual-intro h1{font-size:clamp(23px,3vw,30px);margin:0 0 4px}
 .manual-intro p{color:#95a99d;font-size:14px;line-height:1.9;margin:0}
 .manual-layout .crypto-card{max-width:680px;margin:0 auto 24px}
+.requested-algorithm{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0 16px;padding:12px 14px;border:1px solid #548c6d;border-radius:10px;background:#1d392b;color:#b8d9c5;font-size:13px}
+.requested-algorithm strong{color:#d6ffe4;font-size:14px;letter-spacing:.04em}
+html[data-theme="light"] .requested-algorithm{background:#edf8f0;border-color:#a7d0b3;color:#3e694c}
+html[data-theme="light"] .requested-algorithm strong{color:#205535}
+.crypto-card-head + div:not(.mode-switch):not(.requested-algorithm){margin-top:20px}
 @media(prefers-reduced-motion:no-preference){
   .manual-layout .mode-switch button{transition:background-color .2s ease,color .2s ease}
 }

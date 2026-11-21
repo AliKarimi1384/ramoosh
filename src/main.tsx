@@ -1,6 +1,7 @@
-import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { decryptMessage, encryptMessage, generateEncryptionKeyPair, encryptWithPublicKey, decryptWithPrivateKey, hashText } from '../lib/crypto.js';
+import { decryptMessage, encryptMessage, generateEncryptionKeyPair, encryptionKeyToPem, encryptWithPublicKey, decryptWithPrivateKey, hashText } from '../lib/crypto.js';
 import { compressText, decompressText } from '../lib/compression.js';
 import { readChatStream } from '../lib/chat-stream.js';
 import logoMark from './ramoosh-mark.svg';
@@ -14,9 +15,17 @@ type Mode = 'encrypt' | 'decrypt' | 'hash' | 'compress' | 'decompress';
 type CompressionAlgorithm = 'gzip' | 'deflate';
 type Protocol = 'aes' | 'rsa';
 type HashAlgorithm = 'SHA-256' | 'SHA-384' | 'SHA-512';
+type Algorithm = Protocol | HashAlgorithm | CompressionAlgorithm;
 type Theme = 'light' | 'dark';
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
-type Entry = { id: number; kind: 'message'; message: ChatMessage; streaming?: boolean } | { id: number; kind: 'tool'; mode: Mode };
+type Entry = { id: number; kind: 'message'; message: ChatMessage; streaming?: boolean } | { id: number; kind: 'tool'; mode: Mode; algorithm: Algorithm | null };
+
+function algorithmForMode(mode: Mode, value: unknown): Algorithm | null {
+  if ((mode === 'encrypt' || mode === 'decrypt') && (value === 'aes' || value === 'rsa')) return value;
+  if (mode === 'hash' && (value === 'SHA-256' || value === 'SHA-384' || value === 'SHA-512')) return value;
+  if ((mode === 'compress' || mode === 'decompress') && (value === 'gzip' || value === 'deflate')) return value;
+  return null;
+}
 
 // SpeechRecognition is not yet part of TypeScript's standard DOM declarations.
 type SpeechResult = { isFinal: boolean; [index: number]: { transcript: string } };
@@ -38,11 +47,11 @@ function Mark() {
   return <img className="logo-mark" src={logoMark} alt="" />;
 }
 
-function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult, animateModeSwitch = false }: { t: typeof translations[Language]; initialMode?: Mode; idPrefix: string; requestId?: number; onResult?: () => void; animateModeSwitch?: boolean }) {
+function CryptoTool({ t, initialMode = 'encrypt', initialAlgorithm = null, focused = false, idPrefix, onResult, animateModeSwitch = false }: { t: typeof translations[Language]; initialMode?: Mode; initialAlgorithm?: Algorithm | null; focused?: boolean; idPrefix: string; onResult?: () => void; animateModeSwitch?: boolean }) {
   const [mode, setModeState] = useState<Mode>(initialMode);
-  const [protocol, setProtocolState] = useState<Protocol>('aes');
-  const [hashAlgorithm, setHashAlgorithm] = useState<HashAlgorithm>('SHA-256');
-  const [compressionAlgorithm, setCompressionAlgorithm] = useState<CompressionAlgorithm>('gzip');
+  const [protocol, setProtocolState] = useState<Protocol>(initialAlgorithm === 'rsa' ? 'rsa' : 'aes');
+  const [hashAlgorithm, setHashAlgorithm] = useState<HashAlgorithm>(initialAlgorithm === 'SHA-384' || initialAlgorithm === 'SHA-512' ? initialAlgorithm : 'SHA-256');
+  const [compressionAlgorithm, setCompressionAlgorithm] = useState<CompressionAlgorithm>(initialAlgorithm === 'deflate' ? 'deflate' : 'gzip');
   const [publicKey, setPublicKey] = useState('');
   const [privateKey, setPrivateKey] = useState('');
   const [generatingKeys, setGeneratingKeys] = useState(false);
@@ -66,7 +75,6 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
 
   useEffect(() => () => { cryptoVersion.current++; modeAnimation.current?.cancel(); }, []);
   useEffect(() => { if (result !== null) onResult?.(); }, [result]);
-  useEffect(() => { if (requestId !== undefined) setMode(initialMode); }, [requestId]);
 
   useLayoutEffect(() => {
     if (!animateModeIncoming.current) return;
@@ -128,9 +136,10 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
     setGeneratingKeys(true); setWorking(false); setError(null); setResult(null);
     try {
       const keys = await generateEncryptionKeyPair();
+      const [publicPem, privatePem] = await Promise.all([encryptionKeyToPem(keys.publicKey, 'public'), encryptionKeyToPem(keys.privateKey, 'private')]);
       if (version === cryptoVersion.current) {
-        setPublicKey(JSON.stringify(keys.publicKey, null, 2));
-        setPrivateKey(JSON.stringify(keys.privateKey, null, 2));
+        setPublicKey(publicPem);
+        setPrivateKey(privatePem);
       }
     } catch (err) {
       console.error('Key generation failed:', err);
@@ -150,7 +159,7 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
     try {
       const value = operation === 'hash' ? await hashText(source, { algorithm: hashAlgorithm, format: 'hex' }) : operation === 'compress' ? await compressText(source, { algorithm: compressionAlgorithm }) : operation === 'decompress' ? await decompressText(source, { algorithm: compressionAlgorithm }) : protocol === 'aes'
         ? await (operation === 'encrypt' ? encryptMessage(source, passphrase) : decryptMessage(source, passphrase))
-        : await (operation === 'encrypt' ? encryptWithPublicKey(source, JSON.parse(publicKey)) : decryptWithPrivateKey(source, JSON.parse(privateKey)));
+        : await (operation === 'encrypt' ? encryptWithPublicKey(source, publicKey) : decryptWithPrivateKey(source, privateKey));
       if (version === cryptoVersion.current) setResult(value);
     } catch (err) {
       console.error('Local cryptography failed:', err);
@@ -173,14 +182,15 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
 
   return <section className="crypto-card" aria-labelledby={`${idPrefix}-tool-heading`}>
           <div className="crypto-card-head"><div><span className="local-label"><span/> {t.local}</span><h2 id={`${idPrefix}-tool-heading`}>{hashing ? t.hashMessage : compressing ? t.compressMessage : decompressing ? t.decompressMessage : encrypting ? t.encryptMessage : t.decryptMessage}</h2><p>{hashing ? t.hashDescription : compressing ? t.compressDescription : decompressing ? t.decompressDescription : protocol === 'aes' ? (encrypting ? t.encryptDescription : t.decryptDescription) : (encrypting ? t.rsaEncryptDescription : t.rsaDecryptDescription)}</p></div><span className="card-lock" aria-hidden="true">⌁</span></div>
-          <div className="mode-switch" role="group" aria-label={t.operation}>{(['encrypt', 'decrypt', 'hash', 'compress', 'decompress'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => switchMode(item)}>{t[item]}</button>)}</div>
+          {!focused && <div className="mode-switch" role="group" aria-label={t.operation}>{(['encrypt', 'decrypt', 'hash', 'compress', 'decompress'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => switchMode(item)}>{t[item]}</button>)}</div>}
+          {focused && initialAlgorithm && <div className="requested-algorithm"><span>{t.requestedAlgorithm}</span><strong dir="ltr">{initialAlgorithm === 'aes' ? 'AES-256-GCM' : initialAlgorithm === 'rsa' ? 'RSA-OAEP' : initialAlgorithm.toUpperCase()}</strong></div>}
           <div ref={modeContentRef}>
           <form onSubmit={handleCrypto}>
-            {hashing ? <><label htmlFor={`${idPrefix}-hash-algorithm`}>{t.hashAlgorithm}</label><select id={`${idPrefix}-hash-algorithm`} className="protocol-select" value={hashAlgorithm} onChange={event => changeHashAlgorithm(event.target.value as HashAlgorithm)}>{(['SHA-256', 'SHA-384', 'SHA-512'] as const).map(algorithm => <option key={algorithm} value={algorithm}>{algorithm}</option>)}</select><p className="field-hint">{t.hashHint}</p></> : compression ? <><label htmlFor={`${idPrefix}-compression-algorithm`}>{t.compressionAlgorithm}</label><select id={`${idPrefix}-compression-algorithm`} className="protocol-select" value={compressionAlgorithm} onChange={event => changeCompressionAlgorithm(event.target.value as CompressionAlgorithm)}><option value="gzip">GZIP</option><option value="deflate">DEFLATE</option></select><p className="field-hint">{t.compressionHint}</p></> : <>
-            <label htmlFor={`${idPrefix}-protocol`}>{t.protocol}</label>
+            {hashing ? <>{!(focused && initialAlgorithm) && <><label htmlFor={`${idPrefix}-hash-algorithm`}>{t.hashAlgorithm}</label><select id={`${idPrefix}-hash-algorithm`} className="protocol-select" value={hashAlgorithm} onChange={event => changeHashAlgorithm(event.target.value as HashAlgorithm)}>{(['SHA-256', 'SHA-384', 'SHA-512'] as const).map(algorithm => <option key={algorithm} value={algorithm}>{algorithm}</option>)}</select></>}<p className="field-hint">{t.hashHint}</p></> : compression ? <>{!(focused && initialAlgorithm) && <><label htmlFor={`${idPrefix}-compression-algorithm`}>{t.compressionAlgorithm}</label><select id={`${idPrefix}-compression-algorithm`} className="protocol-select" value={compressionAlgorithm} onChange={event => changeCompressionAlgorithm(event.target.value as CompressionAlgorithm)}><option value="gzip">GZIP</option><option value="deflate">DEFLATE</option></select></>}<p className="field-hint">{t.compressionHint}</p></> : <>
+            {!(focused && initialAlgorithm) && <><label htmlFor={`${idPrefix}-protocol`}>{t.protocol}</label>
             <select id={`${idPrefix}-protocol`} className="protocol-select" value={protocol} onChange={event => setProtocol(event.target.value as Protocol)}>
               <option value="aes">{t.aesProtocol}</option><option value="rsa">{t.rsaProtocol}</option>
-            </select>
+            </select></>}
             <p className="field-hint">{protocol === 'aes' ? t.aesHint : t.rsaHint}</p></>}
             <label htmlFor={`${idPrefix}-source`}>{hashing || compressing ? t.hashInput : decompressing ? t.compressedText : encrypting ? t.originalMessage : t.encryptedMessage}</label><textarea id={`${idPrefix}-source`} dir="auto" value={source} onChange={event => changeSource(event.target.value)} placeholder={hashing ? t.hashPlaceholder : compressing ? t.compressPlaceholder : decompressing ? t.compressedPlaceholder : encrypting ? t.encryptPlaceholder : t.decryptPlaceholder} required={!hashing && !compressing}/>
             {!hashing && !compression && (protocol === 'aes' ? <><div className="field-title"><label htmlFor={`${idPrefix}-passphrase`}>{t.passphrase}</label><span>{t.browserOnly}</span></div><div className="password-field"><input id={`${idPrefix}-passphrase`} type={showPassword ? 'text' : 'password'} value={passphrase} onChange={event => setPassphrase(event.target.value)} placeholder={encrypting ? t.choosePassphrase : t.enterPassphrase} autoComplete="new-password" required/><button type="button" aria-label={showPassword ? t.hidePassphrase : t.showPassphrase} onClick={() => setShowPassword(!showPassword)}>{showPassword ? t.hide : t.show}</button></div><p className="field-hint">{t.passphraseHint}</p></> : <>
@@ -201,6 +211,8 @@ function App() {
   const [language, setLanguage] = useState<Language>(() => document.documentElement.lang === 'en' ? 'en' : 'fa');
   const t = translations[language];
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+  const themeRef = useRef(theme);
+  const themeTransition = useRef<ViewTransition | null>(null);
   const themeChosen = useRef(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [view, setView] = useState<'chat' | 'manual'>('chat');
@@ -321,7 +333,8 @@ function App() {
     };
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    themeRef.current = theme;
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#f5f8f5' : '#0b1113');
   }, [theme]);
@@ -340,11 +353,35 @@ function App() {
     return () => preference.removeEventListener('change', followSystem);
   }, []);
 
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
+  function toggleTheme(event: MouseEvent<HTMLButtonElement>) {
+    const next = themeRef.current === 'dark' ? 'light' : 'dark';
+    themeRef.current = next;
     themeChosen.current = true;
-    setTheme(next);
     try { localStorage.setItem('ramoosh-theme', next); } catch { /* The theme still works for this session. */ }
+
+    themeTransition.current?.skipTransition();
+    if (!document.startViewTransition || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setTheme(next);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+    const transition = document.startViewTransition(() => {
+      flushSync(() => setTheme(next));
+    });
+    themeTransition.current = transition;
+    transition.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 600, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', pseudoElement: '::view-transition-new(root)' },
+      );
+    }).catch(() => { /* A newer transition can supersede this one. */ });
+    transition.finished.finally(() => {
+      if (themeTransition.current === transition) themeTransition.current = null;
+    }).catch(() => { /* The theme remains usable if the transition is skipped. */ });
   }
 
   function switchView(next: 'chat' | 'manual') {
@@ -417,7 +454,8 @@ function App() {
       setEntries(current => current.map(entry => entry.id === replyId && entry.kind === 'message' ? { ...entry, message: reply, streaming: false } : entry));
       if (data.action === 'encrypt' || data.action === 'decrypt' || data.action === 'hash' || data.action === 'compress' || data.action === 'decompress') {
         const mode = data.action;
-        setEntries(current => [...current.filter(entry => entry.kind !== 'tool'), { id: ++nextId.current, kind: 'tool', mode }]);
+        const algorithm = algorithmForMode(mode, data.algorithm);
+        setEntries(current => [...current.filter(entry => entry.kind !== 'tool'), { id: ++nextId.current, kind: 'tool', mode, algorithm }]);
       }
     } catch (err) {
       if (version !== conversationVersion.current) return;
@@ -450,7 +488,7 @@ function App() {
     <main ref={chatViewRef} className={`chat-layout${entries.length === 0 ? ' chat-layout-empty' : ''}`} aria-label={t.chatLabel} hidden={view !== 'chat'}>
       <div className="messages" role="log" aria-live="polite" ref={scrollRef}>
         {entries.length === 0 && <div className="welcome"><div className="welcome-emblem"><Mark /></div><h1>{t.welcomeTitle}</h1></div>}
-        {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><ChatAvatar role={entry.message.role} /><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className={`bubble${entry.message.role === 'assistant' ? ' markdown' : ''}`} dir="auto" aria-live={entry.streaming ? 'off' : undefined}>{entry.message.role === 'assistant' && entry.message.content ? <ChatMarkdown content={entry.message.content} /> : entry.message.content || (entry.streaming ? t.thinking : '')}</div></div></div> : <CryptoTool key="chat-tool" t={t} initialMode={entry.mode} requestId={entry.id} idPrefix="chat" onResult={scrollToLatest} />)}
+        {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><ChatAvatar role={entry.message.role} /><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className={`bubble${entry.message.role === 'assistant' ? ' markdown' : ''}`} dir="auto" aria-live={entry.streaming ? 'off' : undefined}>{entry.message.role === 'assistant' && entry.message.content ? <ChatMarkdown content={entry.message.content} /> : entry.message.content || (entry.streaming ? t.thinking : '')}</div></div></div> : <CryptoTool key={entry.id} t={t} initialMode={entry.mode} initialAlgorithm={entry.algorithm} focused idPrefix="chat" onResult={scrollToLatest} />)}
       </div>
       <div className="composer-wrap"><div className="composer-inner"><form className="chat-form" onSubmit={sendMessage}><label className="sr-only" htmlFor="chat-input">{t.chatInput}</label><input id="chat-input" dir={input ? "auto" : language === "fa" ? "rtl" : "ltr"} ref={inputRef} value={input} onChange={event => setInput(event.target.value)} placeholder={t.chatPlaceholder} maxLength={2000} autoComplete="off"/>{SpeechRecognition && <button className="voice-button" type="button" onClick={toggleVoice} aria-label={listening ? t.stopVoice : t.startVoice} title={listening ? t.stopVoice : t.startVoice} aria-pressed={listening}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></button>}<button type="submit" disabled={busy} aria-label={t.send}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></form>{voiceError && <p className="voice-error" role="alert">{t.voiceError}</p>}<p className="chat-warning"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.2 3.1 7.5 7.5 9.5 4.4-2 7.5-5.3 7.5-9.5V6L12 3Z"/><path d="M12 8v4M12 16h.01"/></svg> {t.warning}</p></div></div>
     </main>
