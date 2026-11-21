@@ -185,3 +185,7 @@ html[data-theme="light"] .manual-intro p{color:#5c7565}
   .manual-tools-toggle span{display:none}
   .manual-layout{padding:22px 16px}
 }
+
+/* Keep all operations usable on narrow screens. */
+.mode-switch { flex-wrap: wrap; }
+.mode-switch button { flex: 1 1 auto; }

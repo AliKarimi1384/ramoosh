@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { decryptMessage, encryptMessage, generateEncryptionKeyPair, encryptWithPublicKey, decryptWithPrivateKey, hashText } from '../lib/crypto.js';
+import { compressText, decompressText } from '../lib/compression.js';
 import { readChatStream } from '../lib/chat-stream.js';
 import logoMark from './ramoosh-mark.svg';
 import { translations, type Language } from './i18n';
@@ -9,7 +10,8 @@ import { ChatAvatar } from './ChatAvatar';
 import '../style.css';
 import './chat-markdown.css';
 
-type Mode = 'encrypt' | 'decrypt' | 'hash';
+type Mode = 'encrypt' | 'decrypt' | 'hash' | 'compress' | 'decompress';
+type CompressionAlgorithm = 'gzip' | 'deflate';
 type Protocol = 'aes' | 'rsa';
 type HashAlgorithm = 'SHA-256' | 'SHA-384' | 'SHA-512';
 type Theme = 'light' | 'dark';
@@ -40,6 +42,7 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
   const [mode, setModeState] = useState<Mode>(initialMode);
   const [protocol, setProtocolState] = useState<Protocol>('aes');
   const [hashAlgorithm, setHashAlgorithm] = useState<HashAlgorithm>('SHA-256');
+  const [compressionAlgorithm, setCompressionAlgorithm] = useState<CompressionAlgorithm>('gzip');
   const [publicKey, setPublicKey] = useState('');
   const [privateKey, setPrivateKey] = useState('');
   const [generatingKeys, setGeneratingKeys] = useState(false);
@@ -47,7 +50,7 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
   const [passphrase, setPassphrase] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<'encryptError' | 'decryptError' | 'rsaEncryptError' | 'rsaDecryptError' | 'keyGenerationError' | 'hashError' | null>(null);
+  const [error, setError] = useState<'encryptError' | 'decryptError' | 'rsaEncryptError' | 'rsaDecryptError' | 'keyGenerationError' | 'hashError' | 'compressionError' | 'decompressionError' | null>(null);
   const [working, setWorking] = useState(false);
   const [copyLabel, setCopyLabel] = useState<'copy' | 'copied' | 'copyManually'>('copy');
   const cryptoVersion = useRef(0);
@@ -57,6 +60,9 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
   const animateModeIncoming = useRef(false);
   const encrypting = mode === 'encrypt';
   const hashing = mode === 'hash';
+  const compressing = mode === 'compress';
+  const decompressing = mode === 'decompress';
+  const compression = compressing || decompressing;
 
   useEffect(() => () => { cryptoVersion.current++; modeAnimation.current?.cancel(); }, []);
   useEffect(() => { if (result !== null) onResult?.(); }, [result]);
@@ -105,6 +111,12 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
     setResult(null); setError(null); setWorking(false); setCopyLabel('copy');
   }
 
+  function changeCompressionAlgorithm(next: CompressionAlgorithm) {
+    cryptoVersion.current++;
+    setCompressionAlgorithm(next);
+    setResult(null); setError(null); setWorking(false); setCopyLabel('copy');
+  }
+
   function changeSource(next: string) {
     if (working) { cryptoVersion.current++; setWorking(false); }
     setSource(next); setResult(null); setError(null); setCopyLabel('copy');
@@ -130,18 +142,19 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
 
   async function handleCrypto(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!hashing && (!source || (protocol === 'aes' ? !passphrase : !(mode === 'encrypt' ? publicKey : privateKey)))) return;
+    if (decompressing && !source) return;
+    if (!hashing && !compression && (!source || (protocol === 'aes' ? !passphrase : !(mode === 'encrypt' ? publicKey : privateKey)))) return;
     const version = ++cryptoVersion.current;
     const operation = mode;
     setError(null); setResult(null); setWorking(true);
     try {
-      const value = operation === 'hash' ? await hashText(source, { algorithm: hashAlgorithm, format: 'hex' }) : protocol === 'aes'
+      const value = operation === 'hash' ? await hashText(source, { algorithm: hashAlgorithm, format: 'hex' }) : operation === 'compress' ? await compressText(source, { algorithm: compressionAlgorithm }) : operation === 'decompress' ? await decompressText(source, { algorithm: compressionAlgorithm }) : protocol === 'aes'
         ? await (operation === 'encrypt' ? encryptMessage(source, passphrase) : decryptMessage(source, passphrase))
         : await (operation === 'encrypt' ? encryptWithPublicKey(source, JSON.parse(publicKey)) : decryptWithPrivateKey(source, JSON.parse(privateKey)));
       if (version === cryptoVersion.current) setResult(value);
     } catch (err) {
       console.error('Local cryptography failed:', err);
-      if (version === cryptoVersion.current) setError(operation === 'hash' ? 'hashError' : protocol === 'rsa' ? (operation === 'decrypt' ? 'rsaDecryptError' : 'rsaEncryptError') : (operation === 'decrypt' ? 'decryptError' : 'encryptError'));
+      if (version === cryptoVersion.current) setError(operation === 'hash' ? 'hashError' : operation === 'compress' ? 'compressionError' : operation === 'decompress' ? 'decompressionError' : protocol === 'rsa' ? (operation === 'decrypt' ? 'rsaDecryptError' : 'rsaEncryptError') : (operation === 'decrypt' ? 'decryptError' : 'encryptError'));
     } finally {
       if (version === cryptoVersion.current) setWorking(false);
     }
@@ -159,27 +172,27 @@ function CryptoTool({ t, initialMode = 'encrypt', idPrefix, requestId, onResult,
   }
 
   return <section className="crypto-card" aria-labelledby={`${idPrefix}-tool-heading`}>
-          <div className="crypto-card-head"><div><span className="local-label"><span/> {t.local}</span><h2 id={`${idPrefix}-tool-heading`}>{hashing ? t.hashMessage : encrypting ? t.encryptMessage : t.decryptMessage}</h2><p>{hashing ? t.hashDescription : protocol === 'aes' ? (encrypting ? t.encryptDescription : t.decryptDescription) : (encrypting ? t.rsaEncryptDescription : t.rsaDecryptDescription)}</p></div><span className="card-lock" aria-hidden="true">⌁</span></div>
-          <div className="mode-switch" role="group" aria-label={t.operation}>{(['encrypt', 'decrypt', 'hash'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => switchMode(item)}>{item === 'encrypt' ? t.encrypt : item === 'decrypt' ? t.decrypt : t.hash}</button>)}</div>
+          <div className="crypto-card-head"><div><span className="local-label"><span/> {t.local}</span><h2 id={`${idPrefix}-tool-heading`}>{hashing ? t.hashMessage : compressing ? t.compressMessage : decompressing ? t.decompressMessage : encrypting ? t.encryptMessage : t.decryptMessage}</h2><p>{hashing ? t.hashDescription : compressing ? t.compressDescription : decompressing ? t.decompressDescription : protocol === 'aes' ? (encrypting ? t.encryptDescription : t.decryptDescription) : (encrypting ? t.rsaEncryptDescription : t.rsaDecryptDescription)}</p></div><span className="card-lock" aria-hidden="true">⌁</span></div>
+          <div className="mode-switch" role="group" aria-label={t.operation}>{(['encrypt', 'decrypt', 'hash', 'compress', 'decompress'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => switchMode(item)}>{t[item]}</button>)}</div>
           <div ref={modeContentRef}>
           <form onSubmit={handleCrypto}>
-            {hashing ? <><label htmlFor={`${idPrefix}-hash-algorithm`}>{t.hashAlgorithm}</label><select id={`${idPrefix}-hash-algorithm`} className="protocol-select" value={hashAlgorithm} onChange={event => changeHashAlgorithm(event.target.value as HashAlgorithm)}>{(['SHA-256', 'SHA-384', 'SHA-512'] as const).map(algorithm => <option key={algorithm} value={algorithm}>{algorithm}</option>)}</select><p className="field-hint">{t.hashHint}</p></> : <>
+            {hashing ? <><label htmlFor={`${idPrefix}-hash-algorithm`}>{t.hashAlgorithm}</label><select id={`${idPrefix}-hash-algorithm`} className="protocol-select" value={hashAlgorithm} onChange={event => changeHashAlgorithm(event.target.value as HashAlgorithm)}>{(['SHA-256', 'SHA-384', 'SHA-512'] as const).map(algorithm => <option key={algorithm} value={algorithm}>{algorithm}</option>)}</select><p className="field-hint">{t.hashHint}</p></> : compression ? <><label htmlFor={`${idPrefix}-compression-algorithm`}>{t.compressionAlgorithm}</label><select id={`${idPrefix}-compression-algorithm`} className="protocol-select" value={compressionAlgorithm} onChange={event => changeCompressionAlgorithm(event.target.value as CompressionAlgorithm)}><option value="gzip">GZIP</option><option value="deflate">DEFLATE</option></select><p className="field-hint">{t.compressionHint}</p></> : <>
             <label htmlFor={`${idPrefix}-protocol`}>{t.protocol}</label>
             <select id={`${idPrefix}-protocol`} className="protocol-select" value={protocol} onChange={event => setProtocol(event.target.value as Protocol)}>
               <option value="aes">{t.aesProtocol}</option><option value="rsa">{t.rsaProtocol}</option>
             </select>
             <p className="field-hint">{protocol === 'aes' ? t.aesHint : t.rsaHint}</p></>}
-            <label htmlFor={`${idPrefix}-source`}>{hashing ? t.hashInput : encrypting ? t.originalMessage : t.encryptedMessage}</label><textarea id={`${idPrefix}-source`} dir="auto" value={source} onChange={event => changeSource(event.target.value)} placeholder={hashing ? t.hashPlaceholder : encrypting ? t.encryptPlaceholder : t.decryptPlaceholder} required={!hashing}/>
-            {!hashing && (protocol === 'aes' ? <><div className="field-title"><label htmlFor={`${idPrefix}-passphrase`}>{t.passphrase}</label><span>{t.browserOnly}</span></div><div className="password-field"><input id={`${idPrefix}-passphrase`} type={showPassword ? 'text' : 'password'} value={passphrase} onChange={event => setPassphrase(event.target.value)} placeholder={encrypting ? t.choosePassphrase : t.enterPassphrase} autoComplete="new-password" required/><button type="button" aria-label={showPassword ? t.hidePassphrase : t.showPassphrase} onClick={() => setShowPassword(!showPassword)}>{showPassword ? t.hide : t.show}</button></div><p className="field-hint">{t.passphraseHint}</p></> : <>
+            <label htmlFor={`${idPrefix}-source`}>{hashing || compressing ? t.hashInput : decompressing ? t.compressedText : encrypting ? t.originalMessage : t.encryptedMessage}</label><textarea id={`${idPrefix}-source`} dir="auto" value={source} onChange={event => changeSource(event.target.value)} placeholder={hashing ? t.hashPlaceholder : compressing ? t.compressPlaceholder : decompressing ? t.compressedPlaceholder : encrypting ? t.encryptPlaceholder : t.decryptPlaceholder} required={!hashing && !compressing}/>
+            {!hashing && !compression && (protocol === 'aes' ? <><div className="field-title"><label htmlFor={`${idPrefix}-passphrase`}>{t.passphrase}</label><span>{t.browserOnly}</span></div><div className="password-field"><input id={`${idPrefix}-passphrase`} type={showPassword ? 'text' : 'password'} value={passphrase} onChange={event => setPassphrase(event.target.value)} placeholder={encrypting ? t.choosePassphrase : t.enterPassphrase} autoComplete="new-password" required/><button type="button" aria-label={showPassword ? t.hidePassphrase : t.showPassphrase} onClick={() => setShowPassword(!showPassword)}>{showPassword ? t.hide : t.show}</button></div><p className="field-hint">{t.passphraseHint}</p></> : <>
               <div className="field-title"><label htmlFor={`${idPrefix}-rsa-key`}>{encrypting ? t.publicKey : t.privateKey}</label><span>{t.browserOnly}</span></div>
               <textarea id={`${idPrefix}-rsa-key`} className="key-field" dir="ltr" value={encrypting ? publicKey : privateKey} onChange={event => encrypting ? setPublicKey(event.target.value) : setPrivateKey(event.target.value)} placeholder={encrypting ? t.publicKeyPlaceholder : t.privateKeyPlaceholder} spellCheck={false} disabled={generatingKeys} required/>
               <p className="field-hint">{encrypting ? t.publicKeyHint : t.privateKeyHint}</p>
               <button type="button" className="secondary-button" disabled={generatingKeys || working} onClick={generateKeys}>{generatingKeys ? t.generatingKeys : t.generateKeys}</button>
               {publicKey && privateKey && <details className="generated-keys"><summary>{t.viewKeys}</summary><label htmlFor={`${idPrefix}-generated-public-key`}>{t.publicKey}</label><textarea id={`${idPrefix}-generated-public-key`} dir="ltr" readOnly value={publicKey}/><label htmlFor={`${idPrefix}-generated-private-key`}>{t.privateKey}</label><textarea id={`${idPrefix}-generated-private-key`} dir="ltr" readOnly value={privateKey}/><p className="field-hint">{t.keySafetyHint}</p></details>}
             </>)}
-            <button type="submit" className="primary-button" disabled={working || generatingKeys}>{hashing ? t.hashMessage : encrypting ? t.encryptMessage : t.decryptMessage}</button>
+            <button type="submit" className="primary-button" disabled={working || generatingKeys}>{hashing ? t.hashMessage : compressing ? t.compressMessage : decompressing ? t.decompressMessage : encrypting ? t.encryptMessage : t.decryptMessage}</button>
           </form>
-          {result !== null && <div className="result-area"><div className="result-head"><label htmlFor={`${idPrefix}-result`}>{hashing ? t.hashResult : encrypting ? t.encryptedMessage : t.originalMessage}</label><button type="button" onClick={copyResult}>{t[copyLabel]}</button></div><textarea id={`${idPrefix}-result`} dir={hashing || encrypting ? "ltr" : "auto"} ref={resultRef} readOnly value={result}/><p>{hashing ? t.hashResultHint : encrypting ? (protocol === 'aes' ? t.encryptedHint : t.rsaEncryptedHint) : t.decryptedHint}</p></div>}<p className="error" role="alert">{error && t[error]}</p>
+          {result !== null && <div className="result-area"><div className="result-head"><label htmlFor={`${idPrefix}-result`}>{hashing ? t.hashResult : compressing ? t.compressedText : decompressing ? t.hashInput : encrypting ? t.encryptedMessage : t.originalMessage}</label><button type="button" onClick={copyResult}>{t[copyLabel]}</button></div><textarea id={`${idPrefix}-result`} dir={hashing || compressing || encrypting ? "ltr" : "auto"} ref={resultRef} readOnly value={result}/><p>{hashing ? t.hashResultHint : compressing ? t.compressedResultHint : decompressing ? t.decompressedResultHint : encrypting ? (protocol === 'aes' ? t.encryptedHint : t.rsaEncryptedHint) : t.decryptedHint}</p></div>}<p className="error" role="alert">{error && t[error]}</p>
           </div>
         </section>;
 }
@@ -402,7 +415,7 @@ function App() {
       const reply: ChatMessage = { role: 'assistant', content: data.reply };
       history.current.push(reply);
       setEntries(current => current.map(entry => entry.id === replyId && entry.kind === 'message' ? { ...entry, message: reply, streaming: false } : entry));
-      if (data.action === 'encrypt' || data.action === 'decrypt' || data.action === 'hash') {
+      if (data.action === 'encrypt' || data.action === 'decrypt' || data.action === 'hash' || data.action === 'compress' || data.action === 'decompress') {
         const mode = data.action;
         setEntries(current => [...current.filter(entry => entry.kind !== 'tool'), { id: ++nextId.current, kind: 'tool', mode }]);
       }

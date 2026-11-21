@@ -190,6 +190,54 @@ test('opens the local hashing form for both providers, with and without streamin
   }
 });
 
+
+test('opens compression and decompression locally for both providers and response modes', async () => {
+  const originalFetch = globalThis.fetch;
+  const openai = process.env.OPENAI_API_KEY;
+  const groq = process.env.GROQ_API_KEY;
+  try {
+    for (const provider of ['openai', 'groq']) {
+      if (provider === 'openai') {
+        process.env.OPENAI_API_KEY = 'test-key';
+        delete process.env.GROQ_API_KEY;
+      } else {
+        delete process.env.OPENAI_API_KEY;
+        process.env.GROQ_API_KEY = 'gsk_test';
+      }
+      for (const stream of [false, true]) {
+        for (const [name, action] of [['open_compress_tool', 'compress'], ['open_decompress_tool', 'decompress']]) {
+          let payload;
+          globalThis.fetch = async (_url, options) => {
+            payload = JSON.parse(options.body);
+            if (stream) return { ok: true, body: providerStream(provider === 'openai' ? [
+              { type: 'response.completed', response: { output: [{ type: 'function_call', name }] } },
+              '[DONE]',
+            ] : [
+              { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: name.slice(0, 5) } }] }, finish_reason: null }] },
+              { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: name.slice(5) } }] }, finish_reason: 'tool_calls' }] },
+              '[DONE]',
+            ]) };
+            return { ok: true, json: async () => provider === 'openai'
+              ? { output: [{ type: 'function_call', name }] }
+              : { choices: [{ message: { tool_calls: [{ function: { name } }] } }] } };
+          };
+          const res = stream ? streamResponse() : response();
+          await handler({ method: 'POST', body: { language: 'en', messages: [{ role: 'user', content: `${action} a message` }], stream } }, res);
+          const result = stream ? sentEvents(res).at(-1) : res.body;
+          assert.equal(result.action, action);
+          assert.match(result.reply, action === 'compress' ? /compression tool/i : /decompression tool/i);
+          const tool = payload.tools.map(item => item.function || item).find(item => item.name === name);
+          assert.deepEqual(tool.parameters, { type: 'object', properties: {}, required: [], additionalProperties: false });
+        }
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (openai === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = openai;
+    if (groq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = groq;
+  }
+});
+
 test('streams OpenAI text across byte boundaries and reports the final reply', async () => {
   const fetch = globalThis.fetch;
   const openai = process.env.OPENAI_API_KEY;

@@ -1,14 +1,14 @@
 import { resilientFetch } from '../lib/http-client.js';
 import { actionFor, streamChat } from '../lib/llm-stream.js';
 
-const INSTRUCTIONS_FA = `تو دستیار فارسی «رموش» هستی. در مورد رمزگذاری، رمزگشایی و هش پیام به اختصار راهنمایی کن.
-وقتی کاربر می‌خواهد پیامی را رمزگذاری، رمزگشایی یا هش کند ابزار مربوط را فراخوانی کن.
+const INSTRUCTIONS_FA = `تو دستیار فارسی «رموش» هستی. در مورد رمزگذاری، رمزگشایی، هش، فشرده‌سازی و بازکردن فشرده‌سازی پیام به اختصار راهنمایی کن.
+وقتی کاربر می‌خواهد پیامی را رمزگذاری، رمزگشایی، هش، فشرده یا از حالت فشرده خارج کند ابزار مربوط را فراخوانی کن.
 ابزار هیچ ورودی محرمانه‌ای ندارد؛ متن، رمز پیام و کلیدها بعداً فقط در مرورگر دریافت می‌شوند.
 در فرم می‌توان بین AES با رمز پیام و RSA-OAEP با کلید عمومی و خصوصی انتخاب کرد.
 هرگز از کاربر نخواه متن، رمز پیام یا کلید خصوصی را در چت وارد کند. اگر درخواست مبهم بود، سؤال کوتاهی بپرس.`;
 
-const INSTRUCTIONS_EN = `You are Ramoosh, an English-speaking assistant. Give brief guidance about encrypting, decrypting, and hashing messages.
-When the user wants to encrypt, decrypt, or hash a message, call the corresponding tool.
+const INSTRUCTIONS_EN = `You are Ramoosh, an English-speaking assistant. Give brief guidance about encrypting, decrypting, hashing, compressing, and decompressing messages.
+When the user wants to encrypt, decrypt, hash, compress, or decompress a message, call the corresponding tool.
 The tool takes no confidential input; the message, passphrase, and keys are collected later only in the browser.
 The form offers AES with a passphrase and RSA-OAEP with public and private keys.
 Never ask the user to enter a message, passphrase, or private key in the chat. If the request is ambiguous, ask a short question. Respond in English.`;
@@ -24,6 +24,8 @@ const translations = {
     encrypt: 'ابزار رمزگذاری آماده است. روش رمزنگاری را انتخاب و اطلاعات را در فرم وارد کنید.',
     decrypt: 'ابزار رمزگشایی آماده است. روش رمزنگاری را انتخاب و اطلاعات را در فرم وارد کنید.',
     hash: 'ابزار هش آماده است. الگوریتم را انتخاب و متن را در فرم وارد کنید.',
+    compress: 'ابزار فشرده‌سازی آماده است. الگوریتم را انتخاب و متن را در فرم وارد کنید.',
+    decompress: 'ابزار بازکردن فشرده‌سازی آماده است. دادهٔ فشرده را در فرم وارد کنید.',
   },
   en: {
     instructions: INSTRUCTIONS_EN,
@@ -35,6 +37,8 @@ const translations = {
     encrypt: 'The encryption tool is ready. Choose a cryptography method and enter the details in the form.',
     decrypt: 'The decryption tool is ready. Choose a cryptography method and enter the details in the form.',
     hash: 'The hashing tool is ready. Choose an algorithm and enter the text in the form.',
+    compress: 'The compression tool is ready. Choose an algorithm and enter the text in the form.',
+    decompress: 'The decompression tool is ready. Enter the compressed data in the form.',
   },
 };
 
@@ -42,6 +46,8 @@ const tools = [
   { type: 'function', name: 'encrypt_message', description: 'Open the local message encryption tool.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
   { type: 'function', name: 'decrypt_message', description: 'Open the local message decryption tool.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
   { type: 'function', name: 'open_hash_tool', description: 'Open the local text hashing tool without sending the text to the server.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
+  { type: 'function', name: 'open_compress_tool', description: 'Open the local text compression tool without sending the text to the server.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
+  { type: 'function', name: 'open_decompress_tool', description: 'Open the local text decompression tool without sending the data to the server.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false }, strict: true },
 ];
 
 export default async function handler(req, res) {
@@ -97,6 +103,22 @@ export default async function handler(req, res) {
         function: {
           name: 'open_hash_tool',
           description: 'Open the local text hashing tool without sending the text to the server.',
+          parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'open_compress_tool',
+          description: 'Open the local text compression tool without sending the text to the server.',
+          parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'open_decompress_tool',
+          description: 'Open the local text decompression tool without sending the data to the server.',
           parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
         },
       },
