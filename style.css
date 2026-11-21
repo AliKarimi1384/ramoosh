@@ -108,6 +108,16 @@ html[data-theme="light"] .password-field input{color:#1c3a29}
 html[data-theme="light"] .password-field button,html[data-theme="light"] .result-head button{color:#216b46}
 html[data-theme="light"] .result-area{border-color:#d6e5da}
 html[data-theme="light"] .error{color:#a12f35}
+
+/* Voice input */
+.chat-form .voice-button{background:transparent;color:#a8d6bb}
+.chat-form .voice-button:hover{background:#294438}
+.chat-form .voice-button[aria-pressed="true"]{background:#713e40;color:#fff}
+.voice-error{margin:8px 4px 0;color:#f0a3a3;font-size:12px;line-height:1.7}
+html[data-theme="light"] .chat-form .voice-button{background:transparent;color:#267c51}
+html[data-theme="light"] .chat-form .voice-button:hover{background:#e8f4eb}
+html[data-theme="light"] .chat-form .voice-button[aria-pressed="true"]{background:#a12f35;color:#fff}
+html[data-theme="light"] .voice-error{color:#a12f35}
 @media(max-width:600px){.header-actions{gap:10px}.theme-toggle{width:44px;height:44px}}
 
 /* Language control and direction-aware message shapes. */

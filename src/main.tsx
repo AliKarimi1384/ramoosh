@@ -16,6 +16,22 @@ type Theme = 'light' | 'dark';
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type Entry = { id: number; kind: 'message'; message: ChatMessage; streaming?: boolean } | { id: number; kind: 'tool'; mode: Mode };
 
+// SpeechRecognition is not yet part of TypeScript's standard DOM declarations.
+type SpeechResult = { isFinal: boolean; [index: number]: { transcript: string } };
+type SpeechResultEvent = { resultIndex: number; results: { length: number; [index: number]: SpeechResult } };
+type SpeechRecognizer = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechResultEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+type SpeechWindow = Window & { SpeechRecognition?: new () => SpeechRecognizer; webkitSpeechRecognition?: new () => SpeechRecognizer };
+
 function Mark() {
   return <img className="logo-mark" src={logoMark} alt="" />;
 }
@@ -177,6 +193,10 @@ function App() {
   const [view, setView] = useState<'chat' | 'manual'>('chat');
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState(false);
+  const recognition = useRef<SpeechRecognizer | null>(null);
+  const SpeechRecognition = (window as SpeechWindow).SpeechRecognition ?? (window as SpeechWindow).webkitSpeechRecognition;
   const history = useRef<ChatMessage[]>([]);
   const controller = useRef<AbortController | null>(null);
   const conversationVersion = useRef(0);
@@ -193,6 +213,59 @@ function App() {
   const viewAnimation = useRef<Animation | null>(null);
   const viewSwitching = useRef(false);
   const animateIncoming = useRef(false);
+
+  function cancelRecognition() {
+    const active = recognition.current;
+    recognition.current = null;
+    if (active) {
+      active.onresult = null; active.onerror = null; active.onend = null;
+      active.abort();
+    }
+    setListening(false);
+  }
+
+  function toggleVoice() {
+    if (recognition.current) {
+      recognition.current.stop();
+      return;
+    }
+    if (!SpeechRecognition) return;
+    setVoiceError(false);
+    try {
+      const active = new SpeechRecognition();
+      recognition.current = active;
+      active.lang = language === 'fa' ? 'fa-IR' : 'en-US';
+      active.continuous = true;
+      active.interimResults = false;
+      let nextResult = 0;
+      active.onresult = event => {
+        if (recognition.current !== active) return;
+        let transcript = '';
+        for (let index = Math.max(event.resultIndex, nextResult); index < event.results.length; index++) {
+          const result = event.results[index];
+          if (!result.isFinal) break;
+          transcript += result[0].transcript;
+          nextResult = index + 1;
+        }
+        const text = transcript.trim();
+        if (text) setInput(current => `${current}${current && !/\s$/.test(current) ? ' ' : ''}${text}`.slice(0, 2000));
+      };
+      active.onerror = () => { if (recognition.current === active) setVoiceError(true); };
+      active.onend = () => { if (recognition.current === active) { recognition.current = null; setListening(false); } };
+      active.start();
+      setListening(true);
+    } catch {
+      recognition.current = null;
+      setListening(false);
+      setVoiceError(true);
+    }
+  }
+
+  useEffect(() => () => {
+    const active = recognition.current;
+    recognition.current = null;
+    if (active) { active.onresult = null; active.onerror = null; active.onend = null; active.abort(); }
+  }, []);
 
   useLayoutEffect(() => {
     document.documentElement.lang = language;
@@ -217,6 +290,8 @@ function App() {
 
   function toggleLanguage() {
     if (languageSwitching.current) return;
+    cancelRecognition();
+    setVoiceError(false);
     const shell = shellRef.current;
     if (!shell || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setLanguage(current => current === 'fa' ? 'en' : 'fa');
@@ -261,6 +336,8 @@ function App() {
 
   function switchView(next: 'chat' | 'manual') {
     if (next === view || viewSwitching.current) return;
+    cancelRecognition();
+    setVoiceError(false);
     const current = view === 'chat' ? chatViewRef.current : manualViewRef.current;
     if (!current || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setView(next);
@@ -306,6 +383,8 @@ function App() {
     event.preventDefault();
     const text = input.trim();
     if (!text || busyRef.current) return;
+    cancelRecognition();
+    setVoiceError(false);
     const version = conversationVersion.current;
     busyRef.current = true; setBusy(true); setInput('');
     const userMessage: ChatMessage = { role: 'user', content: text };
@@ -338,6 +417,7 @@ function App() {
   }
 
   function newChat() {
+    cancelRecognition(); setVoiceError(false);
     conversationVersion.current++; controller.current?.abort(); controller.current = null;
     viewAnimation.current?.cancel(); viewAnimation.current = null; viewSwitching.current = false; animateIncoming.current = false;
     history.current = []; busyRef.current = false; setBusy(false); setEntries([]); setInput(''); setView('chat'); inputRef.current?.focus();
@@ -359,7 +439,7 @@ function App() {
         {entries.length === 0 && <div className="welcome"><div className="welcome-emblem"><Mark /></div><h1>{t.welcomeTitle}</h1></div>}
         {entries.map(entry => entry.kind === 'message' ? <div className={`message ${entry.message.role}`} key={entry.id}><ChatAvatar role={entry.message.role} /><div><div className="message-meta">{entry.message.role === 'assistant' ? t.brand : t.you}</div><div className={`bubble${entry.message.role === 'assistant' ? ' markdown' : ''}`} dir="auto" aria-live={entry.streaming ? 'off' : undefined}>{entry.message.role === 'assistant' && entry.message.content ? <ChatMarkdown content={entry.message.content} /> : entry.message.content || (entry.streaming ? t.thinking : '')}</div></div></div> : <CryptoTool key="chat-tool" t={t} initialMode={entry.mode} requestId={entry.id} idPrefix="chat" onResult={scrollToLatest} />)}
       </div>
-      <div className="composer-wrap"><div className="composer-inner"><form className="chat-form" onSubmit={sendMessage}><label className="sr-only" htmlFor="chat-input">{t.chatInput}</label><input id="chat-input" dir={input ? "auto" : language === "fa" ? "rtl" : "ltr"} ref={inputRef} value={input} onChange={event => setInput(event.target.value)} placeholder={t.chatPlaceholder} maxLength={2000} autoComplete="off"/><button type="submit" disabled={busy} aria-label={t.send}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></form><p className="chat-warning"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.2 3.1 7.5 7.5 9.5 4.4-2 7.5-5.3 7.5-9.5V6L12 3Z"/><path d="M12 8v4M12 16h.01"/></svg> {t.warning}</p></div></div>
+      <div className="composer-wrap"><div className="composer-inner"><form className="chat-form" onSubmit={sendMessage}><label className="sr-only" htmlFor="chat-input">{t.chatInput}</label><input id="chat-input" dir={input ? "auto" : language === "fa" ? "rtl" : "ltr"} ref={inputRef} value={input} onChange={event => setInput(event.target.value)} placeholder={t.chatPlaceholder} maxLength={2000} autoComplete="off"/>{SpeechRecognition && <button className="voice-button" type="button" onClick={toggleVoice} aria-label={listening ? t.stopVoice : t.startVoice} title={listening ? t.stopVoice : t.startVoice} aria-pressed={listening}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></button>}<button type="submit" disabled={busy} aria-label={t.send}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></form>{voiceError && <p className="voice-error" role="alert">{t.voiceError}</p>}<p className="chat-warning"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4.5 6v5.5c0 4.2 3.1 7.5 7.5 9.5 4.4-2 7.5-5.3 7.5-9.5V6L12 3Z"/><path d="M12 8v4M12 16h.01"/></svg> {t.warning}</p></div></div>
     </main>
     <main ref={manualViewRef} className="manual-layout" hidden={view !== 'manual'}>
       <div className="manual-intro"><h1>{t.manualToolsTitle}</h1><p>{t.manualToolsDescription}</p></div>
