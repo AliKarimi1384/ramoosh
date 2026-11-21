@@ -152,3 +152,26 @@ html[data-theme="light"] .secondary-button:hover{background:#d6ecdc}
 html[data-theme="light"] .generated-keys{border-color:#c7dace}
 html[data-theme="light"] .generated-keys summary{color:#315e40}
 @media(max-width:600px){.protocol-select{font-size:16px}}
+
+/* Direct access to the same local cryptography tools used in chat. */
+.topbar,.site-credit{position:relative;z-index:1}
+.manual-tools-toggle{display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;border:1px solid #527c64;border-radius:11px;background:#203a2d;color:#dff3e6;padding:9px 13px;font-size:13px;font-weight:700}
+.manual-tools-toggle:hover{background:#294b39;border-color:#78a989}
+.manual-tools-toggle svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.chat-layout[hidden],.manual-layout[hidden]{display:none}
+.manual-layout{flex:1;min-height:0;overflow-y:auto;padding:36px 22px 28px;scrollbar-color:#3c554b transparent;scrollbar-width:thin}
+.manual-intro{max-width:680px;margin:0 auto 20px}
+.manual-intro h1{font-size:clamp(23px,3vw,30px);margin:0 0 4px}
+.manual-intro p{color:#95a99d;font-size:14px;line-height:1.9;margin:0}
+.manual-layout .crypto-card{max-width:680px;margin:0 auto 24px}
+@media(prefers-reduced-motion:no-preference){
+  .manual-layout .mode-switch button{transition:background-color .2s ease,color .2s ease}
+}
+html[data-theme="light"] .manual-tools-toggle{background:#e1f2e6;border-color:#a7ceb3;color:#245a39}
+html[data-theme="light"] .manual-tools-toggle:hover{background:#d3ebd9;border-color:#78ae89}
+html[data-theme="light"] .manual-intro p{color:#5c7565}
+@media(max-width:600px){
+  .manual-tools-toggle{width:44px;height:44px;padding:0}
+  .manual-tools-toggle span{display:none}
+  .manual-layout{padding:22px 16px}
+}
