@@ -31,7 +31,7 @@ The interface also includes Persian and English language options, light and dark
 ## How it works
 
 ```text
-You ──> chat ──> /api/chat ──> OpenAI
+You ──> chat ──> /api/chat ──> Groq (OpenAI-compatible API)
           │                         │
           └──── opens local form <──┘
                        │
@@ -48,7 +48,7 @@ For example, ask “Open the AES encryption tool,” then enter your message and
 
 - Node.js **22 or later** and npm.
 - A browser with Web Crypto support, running on HTTPS or localhost. Compression also requires the Compression Streams API.
-- An OpenAI API key if you want to use chat. Manual tools work without one.
+- A Groq API key if you want to use chat. Manual tools work without one.
 
 ### Install and run
 
@@ -58,14 +58,14 @@ cd ramoosh
 npm ci
 ```
 
-To enable the assistant, create `.env.local` in the project root with your OpenAI API key:
+The current chat provider is Groq, using its OpenAI-compatible API. To enable the assistant, create `.env.local` in the project root with your Groq API key:
 
 ```dotenv
-OPENAI_API_KEY=your_openai_api_key
-# OPENAI_MODEL=gpt-4.1-mini
+GROQ_API_KEY=your_groq_api_key
+# GROQ_MODEL=qwen/qwen3.8-27b
 ```
 
-Keep other provider keys unset so that OpenAI is selected, and never commit your real API keys.
+Never commit your real API keys.
 
 ```bash
 npm run dev
@@ -77,8 +77,9 @@ Open the address printed in the terminal. The development server starts at `http
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | OpenAI API key for the assistant. |
-| `OPENAI_MODEL` | OpenAI model; defaults to `gpt-4.1-mini`. |
+| `GROQ_API_KEY` | Groq API key for the assistant. |
+| `GROQ_MODEL` | Groq model; defaults to `qwen/qwen3.8-27b`. |
+| `GROQ_BASE_URL` | Optional OpenAI-compatible API base URL. |
 | `PORT` | Starting port for the local development server; defaults to `3000`. |
 
 Choose a model available to your account that supports tool calling. Configuration belongs on the server, not in browser code.
@@ -124,7 +125,7 @@ test/         Automated tests
 The included Vercel configuration builds the Vite frontend into `dist/` and deploys `api/chat.js` as a serverless function.
 
 1. Import the repository into Vercel.
-2. Set `OPENAI_API_KEY` in the project's environment variables and optionally set `OPENAI_MODEL`. Keep other provider keys unset so that OpenAI is selected.
+2. Set `GROQ_API_KEY` in the project's environment variables and optionally set `GROQ_MODEL`.
 3. Deploy, then check the assistant and an encryption/decryption round trip. Redeploy after changing environment variables.
 
 See Vercel's guides for [Git deployments](https://vercel.com/docs/git) and [environment variables](https://vercel.com/docs/environment-variables/managing-environment-variables).
