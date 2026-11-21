@@ -1,69 +1,134 @@
-# رموش | دستیار رمزگذاری پیام
+<div align="center">
+  <img src="readme-logo.jpg" alt="Ramoosh logo" width="120" />
 
-رموش یک نمونهٔ اولیهٔ فارسی برای رمزگذاری، رمزگشایی، هش و فشرده‌سازی متن است. می‌توانید ابزارها را مستقیماً از دکمهٔ «ابزارهای دستی» بالای صفحه باز کنید یا از دستیار گفت‌وگویی بخواهید ابزار موردنظر را انتخاب کند. خود عملیات رمزنگاری در مرورگر انجام می‌شود. پیام و گذرواژه را در فرم محلی ابزار وارد کنید، نه در کادر پیام چت.
+  # Ramoosh | رموش
 
-## فناوری و نحوهٔ کار
+  **A friendly cryptography assistant, with tools that run in your browser.**
 
-- رابط کاربری با React، TypeScript و CSS ساخته شده و با Vite بسته‌بندی می‌شود.
-- مسیر سروری `/api/chat` به صورت تابع Vercel اجرا می‌شود و به Groq یا OpenAI متصل می‌شود. کلید API فقط در محیط سرور قرار می‌گیرد.
-- مدل عملیات و، در صورت درخواست، الگوریتم پشتیبانی‌شده را انتخاب می‌کند؛ پاسخ سرور شامل متن پاسخ، عملیات و نام الگوریتم است. متن و کلیدها فقط در فرم محلی وارد می‌شوند و مرورگر عملیات را اجرا می‌کند.
-- پاسخ دستیار در گفت‌وگو به‌صورت تدریجی نمایش داده می‌شود؛ عملیات انتخاب‌شده پس از تکمیل پاسخ باز می‌شود.
-- مرورگر با Web Crypto از AES-256-GCM و RSA-OAEP-SHA-256 پشتیبانی می‌کند. در حالت AES کلید با PBKDF2-SHA-256 از گذرواژه ساخته می‌شود؛ برای هر پیام salt و IV تصادفی جدید ساخته می‌شود. قالب‌های نسخه‌دار rm1 و rm2 برای رمزگشایی پشتیبانی می‌شوند.
-- در حالت RSA یک جفت کلید ساخته می‌شود: گیرنده کلید عمومی را برای رمزگذاری در اختیار فرستنده قرار می‌دهد و کلید خصوصی را برای رمزگشایی نزد خود نگه می‌دارد. کلیدهای جدید در قالب PEM نمایش داده می‌شوند و کلیدهای قدیمی JWK نیز پذیرفته می‌شوند. رمزگذاری مستقیم RSA برای پیام کوتاه است: با کلید ۲۰۴۸ بیتی حداکثر ۱۹۰ بایت UTF-8 (نه لزوماً ۱۹۰ نویسه) مجاز است.
-- برای رمزگشایی، متن خروجی کامل و همان گذرواژه یا کلید خصوصی مربوط لازم است. تغییر داده، اطلاعات نادرست یا قالب نامعتبر موجب خطا می‌شود.
-- فشرده‌سازی و بازکردن متن به‌صورت محلی با GZIP یا DEFLATE انجام می‌شود. خروجی دادهٔ فشرده در قالب Base64 است و برای بازکردن آن باید همان الگوریتم انتخاب شود. متن ورودی یا خروجی بازشده حداکثر ۱٬۰۰۰٬۰۰۰ بایت UTF-8 است. این قابلیت به مرورگر سازگار با Compression Streams نیاز دارد و فشرده‌سازی رمزگذاری نیست.
-- هش محلی با SHA-256، SHA-384 یا SHA-512 انجام می‌شود و خروجی به صورت شانزده‌شانزدهی نمایش داده می‌شود. هش یک‌طرفه است و قابل رمزگشایی نیست.
+  Encrypt and decrypt messages, create hashes, and compress text — with an AI assistant to help you find the right tool.
 
-## اجرای محلی
+  [Getting started](#getting-started) · [How it works](#how-it-works) · [Privacy and security](#privacy-and-security) · [Deployment](#deployment)
+</div>
 
-به Node.js نسخهٔ ۲۲ یا بالاتر، npm و یک کلید API معتبر (Groq یا OpenAI) نیاز دارید. مدل سبک، پرسرعت و بهینه‌سازی‌شده برای زبان فارسی و فراخوانی ابزار روی این حساب Groq مدل **`qwen/qwen3.8-27b`** است.
+---
 
-1. فایل `.env.local` را در ریشهٔ پروژه بسازید و مقدار کلید خود را قرار دهید:
+Ramoosh is a bilingual Persian and English prototype for exploring everyday cryptography. Open a tool directly, or describe what you want to do in the chat and let the assistant open the appropriate form. The sensitive inputs you enter in those forms are processed locally in your browser.
 
-   ```dotenv
-   # پیکربندی Groq (پیشنهادی - مدل سبک و بسیار سریع)
-   GROQ_API_KEY=gsk_your_groq_api_key_here
-   GROQ_MODEL=qwen/qwen3.8-27b
+> **Keep secrets out of the chat.** Chat messages are sent to the server and the configured AI provider. Enter messages, passphrases, and keys only in the local tool forms.
 
-   # در صورت نیاز به پروکسی در محیط توسعهٔ محلی:
-   # GROQ_PROXY=http://127.0.0.1:10809
+## Features
 
-   # یا پیکربندی OpenAI (اختیاری)
-   # OPENAI_API_KEY=your_openai_api_key_here
-   # OPENAI_MODEL=gpt-4.1-mini
-   ```
+| Tool | What it does |
+| --- | --- |
+| **Encrypt and decrypt** | Use AES-256-GCM with a passphrase or RSA-OAEP-SHA-256 with public and private keys. Generate RSA key pairs in the browser. |
+| **Hash text** | Create SHA-256, SHA-384, or SHA-512 digests, displayed in hexadecimal. |
+| **Compress and decompress** | Use GZIP or DEFLATE to convert text to and from Base64-encoded compressed data. |
+| **Chat-assisted tools** | Ask the assistant to open an operation and, optionally, a supported algorithm. Responses stream into the conversation. |
+| **Manual tools** | Access the same local operations without using the assistant or configuring an AI provider. |
 
-   تنظیم مدل اختیاری است و در صورت خالی بودن، مدل `qwen/qwen3.8-27b` برای Groq انتخاب می‌شود. کلید را در مخزن، فایل زیپ تحویلی یا کد سمت مرورگر قرار ندهید.
+The interface also includes Persian and English language options, light and dark themes, and voice input where supported by the browser.
 
-2. وابستگی‌ها را نصب و سرور توسعهٔ محلی را اجرا کنید:
+## How it works
 
-   ```bash
-   npm install
-   npm run dev
-   ```
+```text
+You ──> chat ──> /api/chat ──> OpenAI
+          │                         │
+          └──── opens local form <──┘
+                       │
+                       └──> browser processes your form input locally
+```
 
-   آدرس محلی نمایش‌داده‌شده در ترمینال را باز کنید. اگر پورت ۳۰۰۰ اشغال باشد، سرور پورت‌های بعدی را امتحان می‌کند؛ آدرس نهایی در ترمینال نمایش داده می‌شود. سرور محلی متغیرهای `.env.local` را بارگذاری می‌کند و مسیر API را نیز در دسترس قرار می‌دهد. باز کردن مستقیم فایل HTML کافی نیست.
+The assistant selects an operation; it does not need your message or passphrase to do so. The React interface performs encryption, decryption, and hashing using Web Crypto, and compression using the browser's Compression Streams API. The `/api/chat` server endpoint keeps the provider API key on the server.
 
-## استقرار روی Vercel
+For example, ask “Open the AES encryption tool,” then enter your message and passphrase in the form that appears. Save the entire encrypted output. To decrypt it later, use that output and the same passphrase.
 
-1. پروژه را بدون فایل‌های حاوی کلید در یک مخزن Git قرار دهید و در داشبورد Vercel از **New Project** آن را import کنید.
-2. در تنظیمات پروژه، `GROQ_API_KEY` را برای محیط موردنظر تعریف کنید. در صورت نیاز `GROQ_MODEL` را نیز مشخص کنید؛ مدل انتخابی باید از فراخوانی ابزار پشتیبانی کند. برای استفاده از OpenAI به جای آن، `OPENAI_API_KEY` و در صورت نیاز `OPENAI_MODEL` را تنظیم کنید.
-3. Vercel رابط را با `npm run build` در پوشهٔ `dist` می‌سازد و مسیر `api/chat.js` را مستقر می‌کند. پس از استقرار، رمزگذاری و رمزگشایی با گذرواژه را بررسی کنید. پس از تغییر متغیرهای محیطی، استقرار جدید لازم است.
+## Getting started
 
-راهنمای رسمی: [استقرار مخزن Git در Vercel](https://vercel.com/docs/git) و [مدیریت متغیرهای محیطی](https://vercel.com/docs/environment-variables/managing-environment-variables).
+### Prerequisites
 
-## استفاده و حریم خصوصی
+- Node.js **22 or later** and npm.
+- A browser with Web Crypto support, running on HTTPS or localhost. Compression also requires the Compression Streams API.
+- An OpenAI API key if you want to use chat. Manual tools work without one.
 
-1. از دکمهٔ «ابزارهای دستی» بالای صفحه وارد ابزار شوید، یا در گفت‌وگو درخواست رمزگذاری، رمزگشایی یا هش بدهید تا فرم محلی داخل گفت‌وگو باز شود.
-2. در ابزار دستی الگوریتم را انتخاب کنید؛ در گفت‌وگو می‌توانید نام الگوریتم را درخواست کنید تا فرم همان الگوریتم باز شود. اگر الگوریتمی مشخص نکردید، آن را در فرم انتخاب کنید. برای AES پیام و گذرواژهٔ قوی را در فیلدهای اختصاصی وارد کنید. برای RSA از کلید عمومی گیرنده به شکل PEM یا JWK استفاده کنید؛ می‌توانید جفت کلید را در مرورگر تولید کنید. خروجی کامل رمزگذاری را کپی و نگهداری کنید.
-3. برای رمزگشایی، خروجی کامل و گذرواژهٔ اصلی AES یا کلید خصوصی RSA مربوط را وارد کنید. کلید خصوصی را محرمانه نگه دارید و همراه پیام نفرستید.
-4. برای هش، الگوریتم SHA را انتخاب و متن را در فرم محلی وارد کنید. خروجی هش را می‌توانید کپی کنید.
-5. برای فشرده‌سازی یا بازکردن متن، عملیات و الگوریتم GZIP یا DEFLATE را انتخاب کنید. خروجی Base64 را همراه نام الگوریتم نگه دارید تا بتوانید آن را باز کنید.
+### Install and run
 
-فیلدهای اختصاصی پیام و گذرواژه برای پردازش محلی طراحی شده‌اند، اما **متن گفت‌وگو به سرور و ارائه‌دهندهٔ مدل ارسال می‌شود**. هرگز گذرواژه، متن محرمانه یا کلید API را در گفت‌وگو ننویسید. گذرواژهٔ فراموش‌شده قابل بازیابی نیست. برای اشتراک‌گذاری پیام، گذرواژه را از مسیر امن و جداگانه در اختیار گیرنده بگذارید. امنیت به قدرت گذرواژه، سلامت دستگاه و قابل اعتماد بودن کد مستقرشده نیز بستگی دارد. Web Crypto به محیط امن مانند HTTPS یا localhost و مرورگر سازگار نیاز دارد.
+```bash
+git clone https://github.com/AliKarimi1384/ramoosh.git
+cd ramoosh
+npm ci
+```
 
-این نسخه زیرساخت اولیه است؛ پیش از ارائهٔ عمومی باید احراز هویت، محدودسازی نرخ درخواست و هزینه، پایش، سیاست حریم خصوصی و بازبینی امنیتی متناسب با کاربرد اضافه شوند. استفادهٔ عمومی بدون محدودیت می‌تواند باعث مصرف کلید API شود.
+To enable the assistant, create `.env.local` in the project root with your OpenAI API key:
 
-## تحویل پروژه
+```dotenv
+OPENAI_API_KEY=your_openai_api_key
+# OPENAI_MODEL=gpt-4.1-mini
+```
 
-برای تحویل نهایی درس، سورس پروژه را بدون `node_modules`، پوشهٔ `.vercel` و فایل‌های محیطی و کلیدها فشرده کنید. همچنین یک ویدیو یا PDF جداگانه تهیه کنید که رابط، یک نمونه رمزگذاری و رمزگشایی، فناوری‌های استفاده‌شده و مسیر فراخوانی ابزار تا اجرای محلی را با تصویر و توضیح نشان دهد. این مستند و فایل زیپ باید پس از تکمیل و آزمایش نهایی پروژه تهیه شوند.
+Keep other provider keys unset so that OpenAI is selected, and never commit your real API keys.
+
+```bash
+npm run dev
+```
+
+Open the address printed in the terminal. The development server starts at `http://127.0.0.1:3000` and tries subsequent ports if needed. It serves both the frontend and `/api/chat`; opening `index.html` directly is not enough. The server loads `.env.local`, or `.env` if `.env.local` does not exist.
+
+### Configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | OpenAI API key for the assistant. |
+| `OPENAI_MODEL` | OpenAI model; defaults to `gpt-4.1-mini`. |
+| `PORT` | Starting port for the local development server; defaults to `3000`. |
+
+Choose a model available to your account that supports tool calling. Configuration belongs on the server, not in browser code.
+
+## Using the tools
+
+1. Open **Manual tools**, or ask the assistant to open an operation.
+2. Select the operation and algorithm, then enter your input in its local form.
+3. Copy and store the result. For decryption, retain the complete encrypted output and the corresponding passphrase or private key. For decompression, retain the Base64 output and the algorithm used.
+
+AES derives a key from the passphrase with PBKDF2-SHA-256 and generates a fresh random salt and IV for each message. Ramoosh can decrypt its versioned `rm1` and `rm2` formats. A forgotten passphrase cannot be recovered.
+
+For RSA, encrypt with the recipient's public key and decrypt with the corresponding private key. Generated keys use PEM; legacy JWK keys are also accepted. Direct encryption with a generated 2048-bit key supports messages up to **190 UTF-8 bytes**, which may be fewer than 190 characters. Generated keys are cleared when the page reloads, so save them safely.
+
+Hashing is one-way and cannot be decrypted. Compression is not encryption. Compression and decompression support up to 1,000,000 bytes of input text or decompressed text, respectively.
+
+## Privacy and security
+
+- Inputs entered in the dedicated tool forms are processed in the browser. Chat messages go to the server and the configured model provider, so do not put confidential text, passphrases, private keys, or API keys in chat.
+- Keep private keys secret. Share an AES passphrase through a separate secure channel from the encrypted message.
+- Security depends on a strong passphrase, a trusted device, and trustworthy deployed code. Use HTTPS outside local development.
+- Ramoosh is a prototype. Before a public deployment, add appropriate authentication, rate and cost controls, monitoring, a privacy policy, and a security review. An unrestricted chat endpoint can consume your API quota.
+
+## Development
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the frontend and local chat API. |
+| `npm test` | Run the Node.js test suite. |
+| `npm run build` | Type-check and build the frontend into `dist/`. |
+| `npm run preview` | Preview the built frontend with Vite; this does not serve the chat API. |
+
+```text
+src/          React interface, translations, and chat presentation
+lib/          Cryptography, compression, and chat/network helpers
+api/chat.js   Server endpoint for the AI assistant
+scripts/      Local development server
+test/         Automated tests
+```
+
+## Deployment
+
+The included Vercel configuration builds the Vite frontend into `dist/` and deploys `api/chat.js` as a serverless function.
+
+1. Import the repository into Vercel.
+2. Set `OPENAI_API_KEY` in the project's environment variables and optionally set `OPENAI_MODEL`. Keep other provider keys unset so that OpenAI is selected.
+3. Deploy, then check the assistant and an encryption/decryption round trip. Redeploy after changing environment variables.
+
+See Vercel's guides for [Git deployments](https://vercel.com/docs/git) and [environment variables](https://vercel.com/docs/environment-variables/managing-environment-variables).
+
+## License
+
+Ramoosh is available under the [Apache License, Version 2.0](LICENSE).
